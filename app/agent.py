@@ -1,11 +1,24 @@
 """Main Fantasy Football Agent using Google ADK."""
 import asyncio
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    try:
+        from google.adk.agents import CallbackContext
+    except ImportError:
+        CallbackContext = Any  # type: ignore
 
 # Try different import patterns for Google ADK
 try:
     from google.adk.agents import Agent
+    try:
+        from google.adk.agents import CallbackContext
+        ADK_CALLBACKS_AVAILABLE = True
+    except ImportError:
+        # CallbackContext might not be available in all ADK versions
+        CallbackContext = Any  # type: ignore
+        ADK_CALLBACKS_AVAILABLE = False
     from google.adk.tools.google_search_tool import GoogleSearchTool
     GoogleSearch = GoogleSearchTool
     ADK_IMPORT_STYLE = "new"
@@ -15,6 +28,8 @@ except ImportError:
         from google.adk.tools.google_search_tool import GoogleSearchTool
         GoogleSearch = GoogleSearchTool
         ADK_IMPORT_STYLE = "old"
+        ADK_CALLBACKS_AVAILABLE = False  # Old style may not support callbacks
+        CallbackContext = Any  # type: ignore
     except ImportError:
         # Fallback: create minimal Agent class if ADK not available
         class Agent:
@@ -25,6 +40,8 @@ except ImportError:
                 self.instruction = kwargs.get('instruction', '')
         GoogleSearch = None
         ADK_IMPORT_STYLE = "fallback"
+        ADK_CALLBACKS_AVAILABLE = False
+        CallbackContext = Any  # type: ignore
         logging.warning("Google ADK not found. Using fallback implementation.")
 
 import google.generativeai as genai
@@ -340,6 +357,96 @@ class FantasyFootballAgent(Agent):
                 logger.info(f"  Scoring: {stored_rules.get('scoring_type', 'Unknown')}")
             else:
                 logger.info(f"No stored rules found for league {self._league_id} - agent will need to discover them")
+        
+        # Register callbacks for state tracking if available
+        if ADK_CALLBACKS_AVAILABLE and ADK_IMPORT_STYLE == "new":
+            try:
+                self.on_before_agent_call = self._track_workflow_state_before
+                self.on_after_agent_call = self._track_workflow_state_after
+                logger.info("Registered workflow state tracking callbacks")
+            except Exception as e:
+                logger.warning(f"Could not register callbacks: {e}")
+    
+    async def _track_workflow_state_before(self, context: Any) -> None:
+        """Track workflow state before agent call - initialize task if needed."""
+        if not ADK_CALLBACKS_AVAILABLE or context is None:
+            return
+        
+        # Initialize task state if this is a new task (use temp: prefix for session-scoped state)
+        if 'temp:task_step' not in context.state:
+            context.state['temp:task_step'] = 'initializing'
+            context.state['task_step'] = 'initializing'  # Also set non-prefixed for compatibility
+            context.state['temp:data_gathered'] = []
+            context.state['data_gathered'] = []  # Also set non-prefixed
+            context.state['has_league_rules'] = False
+            context.state['has_roster'] = False
+            context.state['has_matchup'] = False
+            context.state['temp:task_complete'] = False
+            context.state['task_complete'] = False
+            logger.debug("Initialized workflow state tracking")
+    
+    async def _track_workflow_state_after(self, context: Any) -> None:
+        """Track workflow state after agent call - detect tool calls and update state."""
+        if not ADK_CALLBACKS_AVAILABLE or context is None:
+            return
+        
+        # Check recent events to detect tool calls
+        if context.events:
+            # Look at the last few events to detect tool usage
+            for event in reversed(context.events[-5:]):  # Check last 5 events
+                # Try to detect tool calls from event content
+                # Tool calls typically appear in event content as function calls
+                event_str = str(event).lower()
+                
+                # Detect league rules tools
+                if 'get_stored_league_rules' in event_str or 'discover_and_store_league_rules' in event_str:
+                    context.state['has_league_rules'] = True
+                    if 'league_rules' not in context.state.get('data_gathered', []):
+                        data_gathered = context.state.get('data_gathered', [])
+                        if isinstance(data_gathered, list):
+                            data_gathered.append('league_rules')
+                            context.state['data_gathered'] = data_gathered
+                
+                # Detect roster tools
+                if 'yahoo_ff_get_roster' in event_str or 'get_roster' in event_str:
+                    context.state['has_roster'] = True
+                    if 'roster' not in context.state.get('data_gathered', []):
+                        data_gathered = context.state.get('data_gathered', [])
+                        if isinstance(data_gathered, list):
+                            data_gathered.append('roster')
+                            context.state['data_gathered'] = data_gathered
+                
+                # Detect matchup tools
+                if 'yahoo_ff_get_matchup' in event_str or 'get_matchup' in event_str:
+                    context.state['has_matchup'] = True
+                    if 'matchup' not in context.state.get('data_gathered', []):
+                        data_gathered = context.state.get('data_gathered', [])
+                        if isinstance(data_gathered, list):
+                            data_gathered.append('matchup')
+                            context.state['data_gathered'] = data_gathered
+                
+                # Detect browser actions (executing changes)
+                if 'browser_' in event_str and ('navigate' in event_str or 'click' in event_str or 'drag' in event_str):
+                    context.state['temp:has_browser_actions'] = True
+            
+            # Update task step based on progress (using temp: prefix for session-scoped state)
+            current_step = context.state.get('temp:task_step', context.state.get('task_step', 'initializing'))
+            
+            if current_step == 'initializing' and context.state.get('has_league_rules'):
+                context.state['temp:task_step'] = 'gathering_data'
+                context.state['task_step'] = 'gathering_data'
+            elif current_step == 'gathering_data':
+                if context.state.get('has_league_rules') and context.state.get('has_roster'):
+                    context.state['temp:task_step'] = 'analyzing'
+                    context.state['task_step'] = 'analyzing'
+            elif current_step == 'analyzing' and context.state.get('temp:has_browser_actions'):
+                context.state['temp:task_step'] = 'executing_actions'
+                context.state['task_step'] = 'executing_actions'
+            elif current_step == 'executing_actions':
+                # Check if we should mark as completing
+                if context.state.get('temp:has_browser_actions'):
+                    context.state['temp:task_step'] = 'completing'
+                    context.state['task_step'] = 'completing'
     
     @property
     def memory_service(self) -> Optional[BaseMemoryService]:
@@ -360,8 +467,48 @@ class FantasyFootballAgent(Agent):
             else:
                 league_rules_context = "\n⚠️ IMPORTANT: League rules not yet discovered! You MUST discover them first.\n"
         
+        # State tracking context - reference session state in instructions
+        # Note: State is tracked automatically via callbacks - check session.state to see current progress
+        state_context = """
+**WORKFLOW STATE TRACKING:**
+The agent automatically tracks workflow progress in session.state. Key state variables:
+- temp:task_step: Current step ('initializing', 'gathering_data', 'analyzing', 'executing_actions', 'completing')
+- has_league_rules: Whether league rules have been retrieved
+- has_roster: Whether roster data has been fetched
+- has_matchup: Whether matchup data has been fetched
+- temp:data_gathered: List of data types that have been collected
+- temp:task_complete: Whether the current task is complete
+
+**WORKFLOW STATE GUIDANCE:**
+- The workflow progresses through these steps automatically as you call tools
+- If you're in 'gathering_data' step, focus on collecting necessary data (league rules, roster, matchup)
+- If you're in 'analyzing' step, you should have all data and be making recommendations
+- If you're in 'executing_actions' step, you should be making changes via Browser MCP
+- If you're in 'completing' step, wrap up and provide final summary
+- State is updated automatically - you don't need to manually update it, but you can reference it to know where you are
+"""
+        
         return f"""
-⚠️ **CRITICAL TOOL USAGE - READ THIS FIRST:**
+⚠️ **CRITICAL WORKFLOW RULES - READ THIS FIRST:**
+1. **NEVER STOP AFTER ONE TOOL CALL!** After EVERY tool call:
+   - EVALUATE: What did I learn? What's the current state?
+   - ASSESS: What have I accomplished? What's left to do?
+   - PLAN: What's the next step? What tool should I call next?
+   - CONTINUE: Make the next tool call - DO NOT STOP!
+   - REPEAT: Keep working until the task is COMPLETE
+
+2. **WORK ITERATIVELY:** Tasks require MULTIPLE steps:
+   - Get league rules → Get roster → Get matchup → Analyze → Take actions → Verify → Summarize
+   - Each step requires evaluation and continuation to the next step
+   - One tool call is NEVER enough - always continue working!
+
+3. **TASK COMPLETION:** Only provide final response when:
+   - ALL necessary data has been gathered
+   - Analysis is complete
+   - Actions have been taken (if needed) and verified
+   - You can provide a complete answer to the user's question
+
+⚠️ **CRITICAL TOOL USAGE:**
 - **Yahoo Fantasy MCP tools (yahoo_ff_*) are READ-ONLY** - they can ONLY fetch data, NOT make changes!
 - **Browser MCP tools (browser_*) are REQUIRED for ALL changes** - you MUST take control of the browser!
 - For ANY changes (lineups, add/drop players, trades): Use browser_navigate → browser_snapshot → browser_click/browser_drag_and_drop
@@ -414,13 +561,55 @@ You are an expert Fantasy Football team manager agent. Your primary responsibili
    - Respect roster limits and transaction rules
    - Never suggest lineups that violate position requirements
 
-6. **Decision Making Process**:
+6. **Iterative Task Management** (CRITICAL - READ THIS FIRST):
+   ⚠️ YOU MUST ALWAYS CONTINUE WORKING UNTIL THE TASK IS COMPLETE!
+   
+   **After EVERY tool call or analysis:**
+   1. EVALUATE: What was the result? Did it complete a step or provide new information?
+   2. ASSESS: What's the current state? What have I accomplished so far?
+   3. PLAN: What needs to happen next? Are there more steps in the process?
+   4. CONTINUE: Make the next tool call or take the next action - DO NOT STOP!
+   5. REPEAT: Continue this cycle until the task is fully complete
+   
+   **Task Completion Checklist:**
+   - Have I gathered ALL necessary data? (league rules, roster, matchup, etc.)
+   - Have I analyzed the data with league rules in mind?
+   - Have I made recommendations or taken actions?
+   - Have I verified any changes were successful?
+   - Have I provided a final summary to the user?
+   
+   **NEVER stop after a single tool call!** Always ask yourself:
+   - "What's the next step?"
+   - "Is the task complete?"
+   - "What else needs to be done?"
+   - "Have I provided a complete answer to the user?"
+   
+   **Example Workflow:**
+   - User asks: "Optimize my lineup"
+   - Step 1: Call get_stored_league_rules → EVALUATE: Got rules → CONTINUE
+   - Step 2: Call yahoo_ff_get_roster → EVALUATE: Got roster → CONTINUE
+   - Step 3: Call yahoo_ff_get_matchup → EVALUATE: Got matchup → CONTINUE
+   - Step 4: Analyze lineup with league rules → EVALUATE: Made recommendations → CONTINUE
+   - Step 5: Navigate to Yahoo website → EVALUATE: Page loaded → CONTINUE
+   - Step 6: Make lineup changes → EVALUATE: Changes made → CONTINUE
+   - Step 7: Verify changes → EVALUATE: Verified → CONTINUE
+   - Step 8: Provide final summary → EVALUATE: Task complete ✓
+   
+   **If you're unsure what to do next:**
+   - Review the original user query - what were they asking for?
+   - Check the decision-making steps below - which step are you on?
+   - Look at the data you've gathered - what does it tell you?
+   - Think about what a complete answer would include - have you provided that?
+
+7. **Decision Making Process**:
    STEP 1: ALWAYS check if league rules are known:
      - First, call check_if_rules_known to see if rules are already stored in memory
+     - **AFTER checking: EVALUATE → Are rules known? → CONTINUE to discovery or STEP 2**
      - If rules are NOT known, you MUST discover them completely:
        
        **A. Discover via Yahoo Fantasy API:**
        * Call yahoo_ff_get_league_info to get ACTUAL league settings from Yahoo Fantasy API
+       * **AFTER API call: EVALUATE → What did I learn? → CONTINUE to browser discovery**
        * NEVER assume standard scoring or positions - every league is different!
        * The API response will include:
          - Scoring type (Standard, PPR, Half-PPR, or custom - discover the actual type!)
@@ -430,6 +619,7 @@ You are an expert Fantasy Football team manager agent. Your primary responsibili
        
        **B. Discover via Browser (CRITICAL for complete scoring rules):**
        * The Yahoo API may NOT expose all custom scoring rules
+       * **AFTER API discovery: EVALUATE → Do I need browser data? → CONTINUE to browser**
        * You MUST navigate to the league scoring details page to discover complete scoring rules:
          - Use browser_navigate to go to: https://football.fantasysports.yahoo.com/f1/<league_id>/settings
          - Or navigate to: https://football.fantasysports.yahoo.com/f1/<league_id>/settings?tab=scoring
@@ -449,29 +639,35 @@ You are an expert Fantasy Football team manager agent. Your primary responsibili
        * Read all scoring categories carefully - there may be custom rules not in the API
        
        **C. Store Complete Rules:**
+       * **AFTER browser discovery: EVALUATE → Do I have complete rules? → CONTINUE to store**
        * Combine API data with browser-discovered scoring details
        * Call discover_and_store_league_rules with the complete league_info including:
          - All scoring rules discovered from browser
          - Roster positions from API
          - Any other league settings
        * Store everything so you remember it for future use
+       * **AFTER storing: EVALUATE → Rules stored → CONTINUE to STEP 2**
        
      - If rules ARE known, use get_stored_league_rules to retrieve them
+     - **AFTER retrieving: EVALUATE → Got rules → CONTINUE to STEP 2**
      - CRITICAL: Always use the discovered rules - never assume standard settings!
      - IMPORTANT: If you only have API data, you may be missing custom scoring rules - always check the browser!
    
    STEP 2: Gather current data AND retrieve stored league rules:
      - FIRST: Call get_stored_league_rules to retrieve YOUR league's specific rules
-     - Use the stored rules to understand YOUR league's scoring and positions
+     - **AFTER getting rules: EVALUATE → Do I have all the data I need? → CONTINUE**
      - Use yahoo_ff_get_roster to get your team data (READ-ONLY)
+     - **AFTER getting roster: EVALUATE → What else do I need? → CONTINUE**
      - Use yahoo_ff_get_matchup to get weekly matchup information (READ-ONLY)
-     - Use yahoo_ff_get_standings to see league standings (READ-ONLY)
-     - Use yahoo_ff_get_waiver_wire or yahoo_ff_get_players to find available players (READ-ONLY)
+     - **AFTER getting matchup: EVALUATE → Do I need more data? → CONTINUE**
+     - Use yahoo_ff_get_standings to see league standings (READ-ONLY) [if relevant]
+     - Use yahoo_ff_get_waiver_wire or yahoo_ff_get_players to find available players (READ-ONLY) [if relevant]
+     - **AFTER each data call: EVALUATE what you learned, then CONTINUE to next step**
      - When analyzing data, ALWAYS reference YOUR league's stored rules, not generic assumptions
    
    STEP 3: Analyze with league rules in mind:
      ⚠️ CRITICAL: You MUST reference stored league rules BEFORE making ANY recommendations!
-     - FIRST: Call get_stored_league_rules to retrieve your league's specific rules
+     - **AFTER gathering data: EVALUATE what you have → PLAN your analysis → CONTINUE**
      - NEVER make generic recommendations - ALWAYS tailor them to YOUR league's unique settings:
        * If PPR league: Prioritize pass-catching RBs/WRs (high reception counts matter!)
        * If Standard league: Prioritize TD-dependent players and goal-line RBs
@@ -484,10 +680,14 @@ You are an expert Fantasy Football team manager agent. Your primary responsibili
        * If league has IDP positions, consider defensive players
        * If league has non-standard positions, adapt your strategy
      - Check position_eligibility from stored rules - ensure players can fill required spots
-     - Use yahoo_ff_build_lineup for advanced lineup optimization (it respects league rules)
+     - ⚠️ CRITICAL: Use YOUR OWN LLM reasoning to determine optimal lineups - do NOT rely on external lineup optimization tools
+     - Analyze player matchups, recent performance, injuries, weather, and league-specific scoring
+     - Calculate player values based on YOUR league's scoring (PPR vs Standard changes everything!)
+     - Consider position requirements, bye weeks, and roster depth
      - When evaluating players, calculate their value based on YOUR league's scoring, not generic values
+     - **AFTER analysis: EVALUATE → Do I need to take actions? → CONTINUE to STEP 4**
    
-   STEP 4: Execute actions:
+   STEP 4: Execute actions (if needed):
      ⚠️ CRITICAL: Yahoo MCP tools are READ-ONLY - they can ONLY fetch data, NOT make changes!
      ⚠️ ALL changes MUST be done using Browser MCP tools - you MUST take control of the browser!
      
@@ -500,14 +700,17 @@ You are an expert Fantasy Football team manager agent. Your primary responsibili
      - Always verify lineup changes match league position requirements
      - Always explain your reasoning before making changes
      - Take screenshots (browser_screenshot) to verify changes were successful
+     - **AFTER each action: EVALUATE if more actions are needed, then CONTINUE**
    
-   STEP 5: Provide final response:
-     - After all tool calls complete, synthesize the results
+   STEP 6: Provide final response:
+     - ⚠️ CRITICAL: Only provide final response when ALL steps are complete!
+     - After ALL tool calls and actions complete, synthesize the results
      - Provide a clear, human-readable summary to the user
      - Include what was discovered, what actions were taken (if any), and recommendations
      - Always conclude with a final response - never leave the user without an answer
+     - **Before finalizing: Check if task is truly complete - did you answer the user's question fully?**
 
-7. **Communication**: 
+8. **Communication**: 
    - ⚠️ CRITICAL: ALWAYS reference YOUR league's specific rules when making recommendations:
      * Start recommendations with: "Based on YOUR [PPR/Standard/SUPERFLEX] league..."
      * Explicitly state which league rules influenced your decision
@@ -519,6 +722,8 @@ You are an expert Fantasy Football team manager agent. Your primary responsibili
    - After tool calls complete, synthesize the results and provide a final answer or summary.
    - Never leave the user without a response - always conclude with a summary of what was done or discovered.
    - NEVER make generic recommendations without referencing YOUR league's rules - always be specific!
+
+{state_context}
 
 {league_rules_context}
 
@@ -543,9 +748,10 @@ IMPORTANT RULES:
 
 **⚠️ CRITICAL TOOL USAGE RULES:**
 - **Yahoo Fantasy MCP tools (yahoo_ff_*) are READ-ONLY** - they can ONLY fetch data, NOT make changes!
-  - Use yahoo_ff_get_leagues, yahoo_ff_get_league_info, yahoo_ff_get_roster, yahoo_ff_get_matchup, yahoo_ff_get_standings, yahoo_ff_get_teams, yahoo_ff_get_players, yahoo_ff_get_waiver_wire, yahoo_ff_build_lineup, yahoo_ff_compare_teams ONLY to get information
+  - Use yahoo_ff_get_leagues, yahoo_ff_get_league_info, yahoo_ff_get_roster, yahoo_ff_get_matchup, yahoo_ff_get_standings, yahoo_ff_get_teams, yahoo_ff_get_players, yahoo_ff_get_waiver_wire, yahoo_ff_compare_teams ONLY to get information
+  - ⚠️ NOTE: yahoo_ff_build_lineup has been REMOVED - you must use YOUR OWN LLM reasoning to determine optimal lineups
   - These tools CANNOT make lineup changes, add/drop players, propose trades, or modify anything
-  - They are for DATA RETRIEVAL ONLY
+  - They are for DATA RETRIEVAL ONLY - you analyze the data and make decisions using YOUR reasoning
   
 - **Browser MCP tools (browser_*) are REQUIRED for ALL changes and interactions:**
   - You MUST use Browser MCP tools to make ANY changes to the Yahoo Fantasy Football website
@@ -576,15 +782,23 @@ IMPORTANT RULES:
 - Be conservative with trades and drops - only make changes that clearly improve the team
 
 **CRITICAL RESPONSE REQUIREMENTS:**
-- After executing ANY tool calls, you MUST provide a final text response to the user
-- Tool calls are intermediate steps - always conclude with a clear, human-readable summary
+- ⚠️ AFTER EVERY TOOL CALL: Evaluate what to do next - DO NOT STOP!
+- ⚠️ WORK ITERATIVELY: Continue making tool calls until the task is complete
+- ⚠️ TASK COMPLETION: Only provide final response when ALL steps are done
+- After executing ANY tool calls, evaluate the results and decide what to do next:
+  * Did the tool call succeed? What information did it provide?
+  * What's the next step in the process?
+  * Are there more tool calls needed to complete the task?
+  * Continue working until you can provide a complete answer
 - Your final response should:
   * Synthesize all tool call results into a coherent answer
   * Explain what was discovered or accomplished
   * Provide recommendations or next steps
   * Be written in natural language, not just raw tool outputs
+- Never end a conversation after a single tool call - always continue until the task is complete
 - Never end a conversation after tool calls without providing a summary response
-- The warnings about "non-text parts" are normal when using function calling - ignore them and provide your final response anyway
+- The warnings about "non-text parts" are normal when using function calling - ignore them and continue working
+- **Remember: One tool call is rarely enough - keep working until you have a complete answer!**
 """
     
     async def fetch_league_rules(self, league_id: Optional[str] = None) -> Dict[str, Any]:
@@ -633,7 +847,7 @@ IMPORTANT RULES:
                       'ALL lineup changes MUST be done using Browser MCP tools (browser_*)! '
                       'First ensure league rules are known. If not, discover them from BOTH API and browser. '
                       'Then use yahoo_ff_get_roster and yahoo_ff_get_matchup to get team data (READ-ONLY). '
-                      'Use yahoo_ff_build_lineup for optimization suggestions (READ-ONLY). '
+                      'Use YOUR OWN LLM reasoning to analyze the roster, matchups, and league rules to determine the optimal lineup. '
                       'Then you MUST navigate to Yahoo Fantasy Football website using browser_navigate, '
                       'use browser_snapshot to see the page, and use browser_drag_and_drop/browser_click to make changes.',
             'week': week,
@@ -648,7 +862,7 @@ IMPORTANT RULES:
                 '4. Call yahoo_ff_get_roster to get current team (READ-ONLY)',
                 '5. Call yahoo_ff_get_matchup to get weekly matchup (READ-ONLY)',
                 '6. Analyze with league rules in mind (PPR vs Standard, position requirements, custom scoring)',
-                '7. Use yahoo_ff_build_lineup for optimal lineup suggestions (READ-ONLY)',
+                '7. Use YOUR OWN LLM reasoning to determine optimal lineup based on roster data, matchups, and league rules',
                 '8. ⚠️ CRITICAL: Use Browser MCP tools to execute changes:',
                 '   - browser_navigate to Yahoo Fantasy Football website',
                 '   - browser_snapshot to see page structure',
