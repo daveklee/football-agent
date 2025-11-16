@@ -2,7 +2,7 @@
 # 
 # This project uses MCP (Model Context Protocol) servers for Yahoo Fantasy Football
 # data access and browser automation. The MCP servers have their own dependencies
-# which are installed separately (see setup.sh).
+# which are installed separately (see scripts/setup.sh).
 
 # ============================================================================
 # Google ADK and Core Agent Dependencies

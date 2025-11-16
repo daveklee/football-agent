@@ -179,9 +179,9 @@ def main():
     if all(checks):
         print("✅ All critical checks passed!")
         print("\nNext steps:")
-        print("1. Complete Yahoo OAuth setup (see SETUP_NOTES.md)")
+        print("1. Complete Yahoo OAuth setup (see README.md)")
         print("2. Test the agent: python example_usage.py")
-        print("3. Start ADK web interface: make run-web or ./start_adk_web.sh")
+        print("3. Start ADK web interface: make run-web or ./scripts/start_adk_web.sh")
     else:
         print("⚠️  Some checks failed. Please review the errors above.")
         print("\nCommon fixes:")

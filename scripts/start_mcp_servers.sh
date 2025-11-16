@@ -30,7 +30,7 @@ if [ -f "fantasy-football-mcp-public/fastmcp_server.py" ]; then
     cd ..
     echo "Yahoo Fantasy MCP Server started (PID: $YAHOO_PID)"
 else
-    echo "⚠️  Yahoo Fantasy MCP Server not found. Run ./setup.sh first."
+    echo "⚠️  Yahoo Fantasy MCP Server not found. Run ./scripts/setup.sh first."
 fi
 
 # Browser MCP typically uses stdio, but if HTTP is needed:

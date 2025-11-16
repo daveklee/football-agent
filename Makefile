@@ -15,13 +15,13 @@ install-dev: install ## Install development dependencies
 	pip install -e ".[dev]"
 
 setup: ## Run full setup (creates venv, installs deps, clones MCP server)
-	./setup.sh
+	./scripts/setup.sh
 
 run: ## Run the agent directly
 	python -m app.agent
 
 run-web: ## Start ADK web interface (port 8080)
-	./start_adk_web.sh
+	./scripts/start_adk_web.sh
 
 run-server: ## Start FastAPI server (port 8080)
 	python -m app.server
@@ -42,7 +42,7 @@ clean: ## Clean build artifacts and cache
 	rm -rf build/ dist/ .pytest_cache/ .ruff_cache/
 
 verify: ## Verify setup and dependencies
-	python verify_setup.py
+	python scripts/verify_setup.py
 
 # MCP Server Management
 mcp-yahoo: ## Start Yahoo Fantasy MCP Server in HTTP mode (port 8001)

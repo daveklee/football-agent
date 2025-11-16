@@ -67,7 +67,7 @@ Browser MCP typically uses stdio. For HTTP mode, configure in the server setting
 
 ```bash
 # Start ADK web server (uses port 8080)
-./start_adk_web.sh
+./scripts/start_adk_web.sh
 
 # MCP servers run automatically via stdio (no ports needed)
 ```
@@ -78,7 +78,7 @@ If you need HTTP transport for MCP servers:
 
 ```bash
 # Terminal 1: Start ADK web server
-./start_adk_web.sh
+./scripts/start_adk_web.sh
 
 # Terminal 2: Start MCP servers in HTTP mode
 ./start_mcp_servers.sh

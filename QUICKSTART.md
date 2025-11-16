@@ -34,7 +34,7 @@ This guide will help you get your Fantasy Football Agent up and running quickly.
 cd /Users/daveklee/Documents/github/football-agent
 
 # Run the setup script
-./setup.sh
+./scripts/setup.sh
 ```
 
 ### 4. Configure Environment
@@ -93,7 +93,7 @@ This project uses Browser MCP for browser automation. You need to install the Ch
 source venv/bin/activate
 
 # Start ADK web interface (uses port 8080 by default)
-./start_adk_web.sh
+./scripts/start_adk_web.sh
 
 # Or manually:
 adk web --port 8080
@@ -101,7 +101,7 @@ adk web --port 8080
 
 Then open your browser to `http://localhost:8080`.
 
-**Note**: The ADK web server uses port 8080 to avoid conflicts. MCP servers use stdio transport (no ports needed). See `PORT_CONFIGURATION.md` for details.
+**Note**: The ADK web server uses port 8080 to avoid conflicts. MCP servers use stdio transport (no ports needed). See `docs/PORT_CONFIGURATION.md` for details.
 
 #### Option B: Run Directly
 
@@ -147,7 +147,7 @@ print(result)
 
 ### "Yahoo Fantasy MCP Server not found"
 
-1. Make sure `setup.sh` ran successfully and cloned the repository
+1. Make sure `scripts/setup.sh` ran successfully and cloned the repository
 2. Check that `fantasy-football-mcp-public/` directory exists
 3. Verify dependencies were installed: `pip install -r fantasy-football-mcp-public/requirements.txt`
 

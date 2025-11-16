@@ -37,7 +37,7 @@ cd /Users/daveklee/Documents/github/football-agent
 ### 2. Run Setup Script
 
 ```bash
-./setup.sh
+./scripts/setup.sh
 ```
 
 This will:
@@ -128,7 +128,7 @@ source venv/bin/activate
 
 ```bash
 # Use the helper script (recommended)
-./start_adk_web.sh
+./scripts/start_adk_web.sh
 
 # Or manually specify port
 adk web --port 8080
@@ -147,7 +147,7 @@ Access the interface at `http://localhost:8080` (default port, configurable via 
 - **MCP Servers**: Use stdio transport (no ports needed - standard MCP protocol)
 - **Optional HTTP MCP**: Yahoo Fantasy on 8001, Browser MCP on 8002 (only if HTTP transport needed)
 
-See `PORT_CONFIGURATION.md` for complete port configuration details.
+See `docs/PORT_CONFIGURATION.md` for complete port configuration details.
 
 #### Option 2: Run FastAPI Server
 
@@ -217,19 +217,28 @@ print(result)
 
 ```
 football-agent/
-├── agent.py                 # Main agent definition
-├── main.py                  # Entry point
-├── config.py                # Configuration management
-├── requirements.txt         # Python dependencies
-├── setup.sh                 # Setup script
-├── mcp_config.json          # MCP server configuration
-├── tools/
-│   ├── yahoo_tools.py       # Yahoo Fantasy API tools (read-only)
-│   ├── browser_tools.py     # Browser automation tools
-│   └── analysis_tools.py    # LLM analysis tools
-├── mcp_servers/
-│   └── yahoo_fantasy_server.py  # MCP server for Yahoo Fantasy
-└── README.md                # This file
+├── app/                     # Main application code
+│   ├── agent.py            # Main agent definition
+│   ├── server.py           # FastAPI server
+│   └── utils/              # Utility modules
+│       ├── config.py       # Configuration management
+│       └── tools/          # Tool implementations
+├── scripts/                # Setup and utility scripts
+│   ├── setup.sh           # Initial setup script
+│   ├── start_adk_web.sh   # Start ADK web interface
+│   ├── start_mcp_servers.sh # Start MCP servers (if needed)
+│   └── verify_setup.py     # Verify installation
+├── docs/                   # Documentation
+│   ├── MCP_SERVER_INFO.md  # Yahoo Fantasy MCP Server info
+│   ├── BROWSER_MCP_INFO.md # Browser MCP documentation
+│   ├── PORT_CONFIGURATION.md # Port configuration details
+│   └── TROUBLESHOOTING.md  # Troubleshooting guide
+├── fantasy-football-mcp-public/  # Yahoo Fantasy MCP Server (cloned)
+├── main.py                 # Entry point
+├── mcp_config.json         # MCP server configuration
+├── requirements.txt        # Python dependencies
+├── .env.example           # Environment variables template
+└── README.md              # This file
 ```
 
 ## How It Works
@@ -343,7 +352,14 @@ MIT License - feel free to use and modify for your own fantasy football manageme
 - [Yahoo Fantasy Football MCP Server](https://github.com/derekrbreese/fantasy-football-mcp-public)
 - [Browser MCP](https://browsermcp.io/)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
-- [Requirements Documentation](REQUIREMENTS.md) - Detailed dependency information
+
+## Documentation
+
+- [Quick Start Guide](QUICKSTART.md) - Get started quickly
+- [MCP Server Info](docs/MCP_SERVER_INFO.md) - Yahoo Fantasy MCP Server details
+- [Browser MCP Info](docs/BROWSER_MCP_INFO.md) - Browser automation setup
+- [Port Configuration](docs/PORT_CONFIGURATION.md) - Port usage details
+- [Troubleshooting](docs/TROUBLESHOOTING.md) - Common issues and solutions
 
 ## Support
 

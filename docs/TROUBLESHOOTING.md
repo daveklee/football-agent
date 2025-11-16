@@ -64,7 +64,7 @@ And in `app/agent.py`, don't add `GoogleSearch()`:
 
 After making changes:
 1. Stop the ADK web server (Ctrl+C)
-2. Restart: `make run-web` or `./start_adk_web.sh`
+2. Restart: `make run-web` or `./scripts/start_adk_web.sh`
 3. Clear browser cache if needed
 
 #### 5. Verify Agent Loading

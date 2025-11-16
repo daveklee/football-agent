@@ -33,7 +33,7 @@ async def main():
             # Create agent runner for ADK web interface
             runner = AgentRunner(agent=agent)
             logger.info("Agent initialized. Use ADK web interface to interact.")
-            logger.info("Run './start_adk_web.sh' or 'adk web --port 8080' to start the web interface.")
+            logger.info("Run './scripts/start_adk_web.sh' or 'adk web --port 8080' to start the web interface.")
             logger.info("ADK web server will use port 8080 (configurable via ADK_WEB_PORT env var).")
             logger.info("MCP servers use stdio transport (no ports needed).")
             return runner
@@ -58,6 +58,6 @@ async def main():
 if __name__ == "__main__":
     result = asyncio.run(main())
     logger.info("Agent started successfully!")
-    logger.info("To use ADK web interface, run: make run-web or ./start_adk_web.sh")
+    logger.info("To use ADK web interface, run: make run-web or ./scripts/start_adk_web.sh")
     # Keep running for web interface
     # In production, this would be handled by ADK's deployment system

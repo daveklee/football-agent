@@ -53,7 +53,7 @@ The server includes an enhancement layer that enriches player data with:
 
 ## Installation
 
-The server is automatically cloned during setup via `setup.sh`. If you need to set it up manually:
+The server is automatically cloned during setup via `scripts/setup.sh`. If you need to set it up manually:
 
 ```bash
 git clone https://github.com/derekrbreese/fantasy-football-mcp-public.git
