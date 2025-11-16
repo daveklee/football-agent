@@ -1,0 +1,26 @@
+{
+  "mcpServers": {
+    "yahoo-fantasy": {
+      "command": "/Users/daveklee/Documents/github/football-agent/venv/bin/python",
+      "args": [
+        "/Users/daveklee/Documents/github/football-agent/fantasy-football-mcp-public/fantasy_football_multi_league.py"
+      ],
+      "cwd": "${PWD}",
+      "env": {
+        "YAHOO_ACCESS_TOKEN": "${YAHOO_ACCESS_TOKEN}",
+        "YAHOO_REFRESH_TOKEN": "${YAHOO_REFRESH_TOKEN}",
+        "YAHOO_CONSUMER_KEY": "${YAHOO_CONSUMER_KEY}",
+        "YAHOO_CONSUMER_SECRET": "${YAHOO_CONSUMER_SECRET}",
+        "YAHOO_GUID": "${YAHOO_GUID}"
+      }
+    },
+    "browsermcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@conradkoh/browsermcp"
+      ]
+    }
+  }
+}
+

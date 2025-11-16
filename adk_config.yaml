@@ -1,0 +1,25 @@
+# ADK Configuration File
+# This file configures the Google ADK agent
+
+project_id: football-agent
+region: us-central1
+
+agent:
+  name: fantasy_football_manager
+  # Using gemini-2.5-pro for function calling support (required for ADK FunctionTools)
+  model: gemini-2.5-pro
+  temperature: 0.7
+  
+  # Agent instruction is defined in agent.py
+  # This file is for ADK-specific configuration
+
+# MCP Servers
+# Note: MCP servers are configured in mcp_config.json
+# This file is for ADK-specific agent configuration
+mcp_servers: []
+
+# Tools configuration
+# Note: Removed google_search - Gemini doesn't support mixing custom FunctionTools
+# with built-in tools. Custom tools are registered in agent.py
+tools: []
+

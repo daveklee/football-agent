@@ -1,0 +1,70 @@
+# Fantasy Football Agent - Requirements
+# 
+# This project uses MCP (Model Context Protocol) servers for Yahoo Fantasy Football
+# data access and browser automation. The MCP servers have their own dependencies
+# which are installed separately (see setup.sh).
+
+# ============================================================================
+# Google ADK and Core Agent Dependencies
+# ============================================================================
+
+# Google ADK (Agent Development Kit)
+# Note: google-adk may need to be installed from source or specific repository
+# Check https://github.com/google/adk-python for latest installation instructions
+google-adk>=0.2.0
+
+# Google Gemini API for LLM decision-making
+google-generativeai>=0.3.0
+
+# ============================================================================
+# Configuration and Settings
+# ============================================================================
+
+# Environment variable management
+python-dotenv>=1.0.0
+
+# Settings and configuration management
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# ============================================================================
+# Web Server (FastAPI)
+# ============================================================================
+
+# FastAPI for REST API server
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# ============================================================================
+# MCP Server Dependencies
+# ============================================================================
+# 
+# NOTE: The following MCP servers are used but have separate dependencies:
+#
+# 1. Yahoo Fantasy Football MCP Server
+#    - Repository: https://github.com/derekrbreese/fantasy-football-mcp-public
+#    - Dependencies: Installed via fantasy-football-mcp-public/requirements.txt
+#    - Provides: Yahoo Fantasy Football API access (read-only)
+#
+# 2. Browser MCP Server
+#    - Website: https://browsermcp.io/
+#    - Installation: Chrome extension + npm package via npx
+#    - Command: npx -y @modelcontextprotocol/server-browser
+#    - Provides: Browser automation using your Chrome profile
+#
+# These are configured in mcp_config.json and handled by the MCP client/ADK.
+# No Python packages needed here for MCP servers themselves.
+
+# ============================================================================
+# Optional Dependencies (Not Required for Core Functionality)
+# ============================================================================
+
+# The following are NOT required since we use MCP servers:
+# - yahoofantasy: Yahoo Fantasy MCP Server handles this
+# - selenium/playwright: Browser MCP handles browser automation
+# - requests/beautifulsoup4: Not directly used in agent code
+# - aiohttp: Not directly used in agent code
+# - python-dateutil/pytz: Not directly used in agent code
+
+# If you need these for custom extensions or debugging, install separately:
+# pip install yahoofantasy requests beautifulsoup4 aiohttp python-dateutil pytz
