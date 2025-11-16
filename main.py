@@ -28,13 +28,20 @@ async def main():
     try:
         if ADK_AVAILABLE and default_memory_service is not None:
             # Create ADK runner with shared session + memory services
+            # The Runner orchestrates the event loop:
+            # 1. Receives user query and calls agent.run_async()
+            # 2. Processes Events yielded by agent (commits state via Services)
+            # 3. Forwards Events upstream (e.g., to UI)
+            # 4. Allows agent to resume and yield next Event
+            # See: https://google.github.io/adk-docs/runtime/#execution-logics-role-agent-tool-callback
             session_service = InMemorySessionService()
             runner = adk.Runner(
                 agent=agent,
                 session_service=session_service,
                 memory_service=default_memory_service,
             )
-            logger.info("Agent initialized. Use ADK web interface to interact.")
+            logger.info("Agent initialized with ADK Runner (event loop pattern).")
+            logger.info("Use ADK web interface to interact.")
             logger.info("Run './scripts/start_adk_web.sh' or 'adk web --port 8080' to start the web interface.")
             logger.info("ADK web server will use port 8080 (configurable via ADK_WEB_PORT env var).")
             logger.info("MCP servers use stdio transport (no ports needed).")

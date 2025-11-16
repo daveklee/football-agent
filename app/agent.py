@@ -86,7 +86,19 @@ genai.configure(api_key=settings.gemini_api_key)
 
 
 class FantasyFootballAgent(Agent):
-    """Main agent for managing Yahoo Fantasy Football team."""
+    """Main agent for managing Yahoo Fantasy Football team.
+    
+    This agent extends the base ADK Agent class, which automatically handles the
+    Runner's event loop pattern. The agent's run_async method (inherited from
+    base Agent) yields Events that the Runner processes according to the ADK
+    Runtime event loop:
+    
+    1. Agent logic runs and yields Events
+    2. Runner receives Events and commits state changes via Services
+    3. Agent logic resumes after Runner processes the Events
+    
+    See: https://google.github.io/adk-docs/runtime/#execution-logics-role-agent-tool-callback
+    """
     
     # Class-level initialization to ensure attributes exist before any method calls
     _league_id: Optional[str] = None
@@ -368,11 +380,21 @@ class FantasyFootballAgent(Agent):
                 logger.warning(f"Could not register callbacks: {e}")
     
     async def _track_workflow_state_before(self, context: Any) -> None:
-        """Track workflow state before agent call - initialize task if needed."""
+        """Track workflow state before agent call - initialize task if needed.
+        
+        Note: This callback modifies context.state directly, which is a "dirty read" pattern
+        allowed by ADK Runtime. The state changes will be committed by the Runner after
+        the agent yields events. For critical state changes, consider yielding Events with
+        state_delta instead, but for callbacks, direct modification is acceptable.
+        
+        See: https://google.github.io/adk-docs/runtime/#execution-logics-role-agent-tool-callback
+        """
         if not ADK_CALLBACKS_AVAILABLE or context is None:
             return
         
         # Initialize task state if this is a new task (use temp: prefix for session-scoped state)
+        # Note: Direct state modification is allowed in callbacks (dirty reads pattern)
+        # The Runner will commit these changes when processing events
         if 'temp:task_step' not in context.state:
             context.state['temp:task_step'] = 'initializing'
             context.state['task_step'] = 'initializing'  # Also set non-prefixed for compatibility
@@ -386,11 +408,22 @@ class FantasyFootballAgent(Agent):
             logger.debug("Initialized workflow state tracking")
     
     async def _track_workflow_state_after(self, context: Any) -> None:
-        """Track workflow state after agent call - detect tool calls and update state."""
+        """Track workflow state after agent call - detect tool calls and update state.
+        
+        Note: This callback modifies context.state directly, which is a "dirty read" pattern
+        allowed by ADK Runtime. The state changes will be committed by the Runner after
+        the agent yields events. For critical state changes, consider yielding Events with
+        state_delta instead, but for callbacks, direct modification is acceptable.
+        
+        See: https://google.github.io/adk-docs/runtime/#execution-logics-role-agent-tool-callback
+        """
         if not ADK_CALLBACKS_AVAILABLE or context is None:
             return
         
         # Check recent events to detect tool calls
+        # Note: We're reading events that were already processed by the Runner
+        # This follows the ADK Runtime event loop pattern where the Runner processes
+        # events before the agent logic resumes
         if context.events:
             # Look at the last few events to detect tool usage
             for event in reversed(context.events[-5:]):  # Check last 5 events
