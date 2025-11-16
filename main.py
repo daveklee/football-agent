@@ -5,17 +5,14 @@ import sys
 
 # Try importing ADK components
 try:
-    from google.adk import AgentRunner
+    from google import adk
+    from google.adk.sessions import InMemorySessionService
     ADK_AVAILABLE = True
 except ImportError:
-    try:
-        from google.adk.agents import AgentRunner
-        ADK_AVAILABLE = True
-    except ImportError:
-        ADK_AVAILABLE = False
-        logging.warning("ADK AgentRunner not found. Agent will run in standalone mode.")
+    ADK_AVAILABLE = False
+    logging.warning("ADK Runner not available. Agent will run in standalone mode.")
 
-from app.agent import agent, root_agent
+from app.agent import agent, root_agent, default_memory_service
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,9 +26,14 @@ async def main():
     logger.info("Starting Fantasy Football Agent")
     
     try:
-        if ADK_AVAILABLE:
-            # Create agent runner for ADK web interface
-            runner = AgentRunner(agent=agent)
+        if ADK_AVAILABLE and default_memory_service is not None:
+            # Create ADK runner with shared session + memory services
+            session_service = InMemorySessionService()
+            runner = adk.Runner(
+                agent=agent,
+                session_service=session_service,
+                memory_service=default_memory_service,
+            )
             logger.info("Agent initialized. Use ADK web interface to interact.")
             logger.info("Run './scripts/start_adk_web.sh' or 'adk web --port 8080' to start the web interface.")
             logger.info("ADK web server will use port 8080 (configurable via ADK_WEB_PORT env var).")

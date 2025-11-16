@@ -38,10 +38,12 @@ class AnalysisTools:
             prompt = f"""
 You are analyzing a Fantasy Football lineup for Week {week}.
 
+⚠️ CRITICAL: You MUST use the league settings below - NEVER make generic recommendations!
+
 TEAM DATA:
 {self._format_team_data(team_data)}
 
-LEAGUE SETTINGS:
+LEAGUE SETTINGS (USE THESE EXACT RULES - DO NOT ASSUME STANDARD SETTINGS):
 {self._format_league_settings(league_settings)}
 
 MATCHUP:
@@ -52,14 +54,25 @@ PLAYER RESEARCH:
 {self._format_player_research(player_research)}
 
 Based on this information, analyze the optimal lineup considering:
-1. **CRITICAL**: League-specific scoring rules (PPR vs Standard significantly affects player values)
-2. **CRITICAL**: Exact roster position requirements - lineup MUST match league positions exactly
+1. **CRITICAL**: Use the EXACT league-specific scoring rules from above (PPR vs Standard significantly affects player values)
+   - If PPR: Prioritize players with high reception counts
+   - If Standard: Prioritize TD-dependent players
+   - Use the scoring_settings from league_settings to calculate player values accurately
+2. **CRITICAL**: Match EXACT roster position requirements from league_settings - lineup MUST match positions exactly
+   - Check roster_positions from league_settings
+   - Ensure you're filling ALL required positions (e.g., if 2 FLEX spots, fill both)
+   - Use position_eligibility from league_settings to determine which players can fill FLEX/SUPERFLEX spots
 3. Matchup difficulty for each player
-4. Recent performance trends (especially receptions in PPR leagues)
+4. Recent performance trends:
+   - In PPR leagues: Prioritize receptions heavily
+   - In Standard leagues: Prioritize touchdowns and yards
+   - Use the scoring format from league_settings to weight stats correctly
 5. Injury status and game-time decisions
 6. Weather conditions
 7. Team news and depth chart changes
-8. Position eligibility rules (which positions can fill FLEX/SUPERFLEX spots)
+8. Position eligibility rules from league_settings (which positions can fill FLEX/SUPERFLEX spots)
+
+⚠️ IMPORTANT: In your reasoning, explicitly state which league rules you're using (e.g., "In this PPR league..." or "Given the SUPERFLEX position...")
 
 Provide:
 1. Recommended starting lineup with reasoning
@@ -103,10 +116,12 @@ Format your response as JSON with the following structure:
             prompt = f"""
 You are evaluating waiver wire players for a Fantasy Football team.
 
+⚠️ CRITICAL: You MUST use the league settings below - NEVER make generic recommendations!
+
 CURRENT TEAM:
 {self._format_team_data(team_data)}
 
-LEAGUE SETTINGS:
+LEAGUE SETTINGS (USE THESE EXACT RULES - DO NOT ASSUME STANDARD SETTINGS):
 {self._format_league_settings(league_settings)}
 
 AVAILABLE PLAYERS (Top 20):
@@ -116,13 +131,25 @@ PLAYER RESEARCH:
 {self._format_player_research(player_research)}
 
 Analyze which players, if any, should be picked up. Consider:
-1. **CRITICAL**: League scoring rules - in PPR leagues, prioritize pass-catching players
-2. **CRITICAL**: League position requirements - ensure roster fits league structure
-3. Team needs (positions, bye weeks, injuries)
-4. Player potential and recent performance (especially receptions in PPR leagues)
-5. Long-term vs short-term value
-6. Who to drop if picking up a player
-7. How scoring rules affect player values (PPR vs Standard)
+1. **CRITICAL**: Use the EXACT league scoring rules from above:
+   - If PPR league: Prioritize pass-catching players (high reception counts)
+   - If Standard league: Prioritize TD-dependent players
+   - Use scoring_settings from league_settings to calculate accurate player values
+   - Example: In PPR, a WR with 8 catches for 60 yards = 14 points vs 6 points in Standard
+2. **CRITICAL**: Match league position requirements from league_settings:
+   - Check roster_positions to see exact position needs
+   - Ensure recommendations fit YOUR league's structure (e.g., SUPERFLEX, 2 FLEX, IDP)
+   - Use position_eligibility to determine which players can fill FLEX spots
+3. Team needs (positions, bye weeks, injuries) based on YOUR league's position requirements
+4. Player potential and recent performance:
+   - In PPR leagues: Weight receptions heavily in evaluation
+   - In Standard leagues: Weight touchdowns and yards heavily
+   - Use the scoring format from league_settings to evaluate correctly
+5. Long-term vs short-term value based on YOUR league's scoring system
+6. Who to drop if picking up a player (consider YOUR league's position needs)
+7. How YOUR league's specific scoring rules affect player values
+
+⚠️ IMPORTANT: In your reasoning, explicitly reference which league rules you're using (e.g., "In this PPR league, Player X is valuable because..." or "Given the SUPERFLEX position...")
 
 Provide recommendations in JSON format:
 {{
@@ -142,20 +169,37 @@ Provide recommendations in JSON format:
             logger.error(f"Error evaluating waiver wire: {e}")
             return {'should_pickup': False, 'error': str(e)}
     
-    async def evaluate_trade(self, trade: Dict[str, Any]) -> Dict[str, Any]:
+    async def evaluate_trade(
+        self, 
+        trade: Dict[str, Any],
+        league_settings: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """Evaluate a trade offer."""
         try:
+            league_context = ""
+            if league_settings:
+                league_context = f"\nLEAGUE SETTINGS (USE THESE EXACT RULES):\n{self._format_league_settings(league_settings)}\n"
+            
             prompt = f"""
 You are evaluating a Fantasy Football trade offer.
 
+⚠️ CRITICAL: You MUST use the league settings below - NEVER make generic trade evaluations!
+
 TRADE DETAILS:
 {self._format_trade(trade)}
+{league_context}
 
 Analyze this trade considering:
-1. Player values and projections
-2. Team needs
-3. Long-term implications
-4. League context
+1. **CRITICAL**: Player values based on YOUR league's scoring rules:
+   - If PPR league: Pass-catching players are MORE valuable
+   - If Standard league: TD-dependent players are MORE valuable
+   - If SUPERFLEX/2QB league: QBs are MUCH more valuable
+   - Use scoring_settings from league_settings to calculate accurate values
+2. Team needs based on YOUR league's position requirements (check roster_positions)
+3. Long-term implications considering YOUR league's scoring system
+4. League context: Use position_eligibility to understand FLEX/SUPERFLEX value
+
+⚠️ IMPORTANT: In your reasoning, explicitly state which league rules affect the trade (e.g., "In this PPR league, Player X's receptions make them more valuable..." or "Given the SUPERFLEX position, QB Y is worth...")
 
 Provide evaluation in JSON format:
 {{
@@ -184,17 +228,29 @@ Provide evaluation in JSON format:
             prompt = f"""
 You are proposing Fantasy Football trades.
 
+⚠️ CRITICAL: You MUST use the league settings below - NEVER make generic trade proposals!
+
 CURRENT TEAM:
 {self._format_team_data(team_data)}
 
-LEAGUE SETTINGS:
+LEAGUE SETTINGS (USE THESE EXACT RULES - DO NOT ASSUME STANDARD SETTINGS):
 {self._format_league_settings(league_settings)}
 
 Analyze the team and propose 1-3 trades that would improve the team. Consider:
-1. Team weaknesses
-2. Position depth
-3. Player values
-4. Trade feasibility
+1. **CRITICAL**: Team weaknesses based on YOUR league's exact position requirements (check roster_positions):
+   - If SUPERFLEX/2QB: Consider QB depth needs
+   - If 2 FLEX spots: Consider depth needs
+   - Use position_eligibility to understand which players can fill FLEX spots
+2. **CRITICAL**: Player values based on YOUR league's scoring rules:
+   - If PPR league: Pass-catching players are MORE valuable in trades
+   - If Standard league: TD-dependent players are MORE valuable
+   - If SUPERFLEX/2QB: QBs are MUCH more valuable - factor this heavily
+   - Use scoring_settings to calculate accurate trade values
+3. Position depth based on YOUR league's position requirements
+4. Long-term vs short-term value considering YOUR league's scoring system
+5. Trade feasibility and fairness (consider YOUR league's scoring when evaluating fairness)
+
+⚠️ IMPORTANT: In your reasoning, explicitly reference which league rules make the trade beneficial (e.g., "In this PPR league..." or "Given the SUPERFLEX position...")
 
 Provide proposals in JSON format:
 {{

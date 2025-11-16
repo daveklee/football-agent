@@ -30,6 +30,7 @@ class LeagueRulesTool:
             FunctionTool(func=self.discover_and_store_league_rules),
             FunctionTool(func=self.get_stored_league_rules),
             FunctionTool(func=self.check_if_rules_known),
+            FunctionTool(func=self.search_league_rules_memory),
         ]
     
     async def discover_and_store_league_rules(
@@ -76,7 +77,7 @@ class LeagueRulesTool:
         
         # If league_info is provided, store it
         if league_info:
-            success = self.memory.store_league_rules(league_id, league_info)
+            success = await self.memory.store_league_rules(league_id, league_info)
             if success:
                 stored_rules = self.memory.get_league_rules(league_id)
                 return {
@@ -230,4 +231,26 @@ class LeagueRulesTool:
                 'message': 'League rules not yet discovered. Call discover_and_store_league_rules to discover them.',
                 'critical': 'NEVER assume standard scoring or positions - always discover the actual rules!'
             }
+
+    async def search_league_rules_memory(self, query: str) -> Dict[str, Any]:
+        """Search stored league rules using simple keyword search."""
+        if not query:
+            return {
+                'status': 'error',
+                'error': 'Query is required to search league rules memory'
+            }
+
+        results = self.memory.search_league_rules(query)
+        if not results:
+            return {
+                'status': 'not_found',
+                'query': query,
+                'message': 'No league rules matched your search query'
+            }
+
+        return {
+            'status': 'success',
+            'query': query,
+            'matches': results
+        }
 

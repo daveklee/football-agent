@@ -34,6 +34,22 @@ from app.utils.tools.analysis_tools import AnalysisTools
 from app.utils.league_memory import LeagueRulesMemory
 from app.utils.tools.league_rules_tool import LeagueRulesTool
 
+try:
+    from google.adk.memory import InMemoryMemoryService
+    from google.adk.memory.base_memory_service import BaseMemoryService
+
+    ADK_MEMORY_AVAILABLE = True
+except ImportError:  # pragma: no cover - optional dependency
+    InMemoryMemoryService = None  # type: ignore
+
+    class BaseMemoryService:  # type: ignore
+        ...
+
+    ADK_MEMORY_AVAILABLE = False
+
+DEFAULT_APP_NAME = "football-agent"
+DEFAULT_MEMORY_SERVICE = InMemoryMemoryService() if ADK_MEMORY_AVAILABLE else None
+
 # Import MCP toolset support
 try:
     from google.adk.tools.mcp_tool import McpToolset
@@ -55,10 +71,24 @@ genai.configure(api_key=settings.gemini_api_key)
 class FantasyFootballAgent(Agent):
     """Main agent for managing Yahoo Fantasy Football team."""
     
-    # Class-level initialization to ensure _league_id exists before any method calls
+    # Class-level initialization to ensure attributes exist before any method calls
     _league_id: Optional[str] = None
+    _memory_service: Optional[BaseMemoryService] = None
     
-    def __init__(self):
+    def __init__(self, memory_service: Optional[BaseMemoryService] = None):
+        # Initialize memory service first (needed by LeagueRulesMemory)
+        # Use provided memory_service, or fall back to default, or create a new one
+        if memory_service is not None:
+            self._memory_service = memory_service
+        elif DEFAULT_MEMORY_SERVICE is not None:
+            self._memory_service = DEFAULT_MEMORY_SERVICE
+        elif ADK_MEMORY_AVAILABLE:
+            # Create a new instance if ADK is available but no default was set
+            self._memory_service = InMemoryMemoryService()
+        else:
+            # ADK memory not available - set to None (will be handled gracefully)
+            self._memory_service = None
+        
         # Initialize league ID early (needed for _get_agent_instruction)
         # Use getattr to safely get from settings, defaulting to None
         try:
@@ -67,7 +97,10 @@ class FantasyFootballAgent(Agent):
             self._league_id = None
         
         # Initialize league rules memory for persistent storage
-        self._league_memory = LeagueRulesMemory()
+        self._league_memory = LeagueRulesMemory(
+            memory_service=self._memory_service,
+            app_name=DEFAULT_APP_NAME,
+        )
         
         # Initialize league rules tool for discovering and managing league settings
         league_rules_tool = LeagueRulesTool(memory=self._league_memory)
@@ -308,6 +341,11 @@ class FantasyFootballAgent(Agent):
             else:
                 logger.info(f"No stored rules found for league {self._league_id} - agent will need to discover them")
     
+    @property
+    def memory_service(self) -> Optional[BaseMemoryService]:
+        """Get the ADK memory service instance."""
+        return self._memory_service
+    
     def _get_agent_instruction(self) -> str:
         """Get the main instruction for the agent."""
         # Include stored league rules in instructions if available
@@ -323,13 +361,41 @@ class FantasyFootballAgent(Agent):
                 league_rules_context = "\n⚠️ IMPORTANT: League rules not yet discovered! You MUST discover them first.\n"
         
         return f"""
+⚠️ **CRITICAL TOOL USAGE - READ THIS FIRST:**
+- **Yahoo Fantasy MCP tools (yahoo_ff_*) are READ-ONLY** - they can ONLY fetch data, NOT make changes!
+- **Browser MCP tools (browser_*) are REQUIRED for ALL changes** - you MUST take control of the browser!
+- For ANY changes (lineups, add/drop players, trades): Use browser_navigate → browser_snapshot → browser_click/browser_drag_and_drop
+- Yahoo tools are for DATA RETRIEVAL ONLY - Browser tools are for ALL INTERACTIONS AND CHANGES
+
 You are an expert Fantasy Football team manager agent. Your primary responsibilities include:
 
-1. **Lineup Optimization**: Analyze matchups, player performance, injuries, and weather conditions to optimize the weekly lineup. CRITICALLY IMPORTANT: You MUST consider your league's unique scoring system, roster positions, and rules before making ANY lineup decisions.
+1. **Lineup Optimization**: Analyze matchups, player performance, injuries, and weather conditions to optimize the weekly lineup. 
+   ⚠️ CRITICAL: You MUST retrieve and use stored league rules BEFORE making ANY recommendations!
+   - Call get_stored_league_rules FIRST to get YOUR league's specific scoring and positions
+   - NEVER make generic recommendations - ALWAYS reference YOUR league's exact rules
+   - If PPR league: Prioritize players with high reception counts
+   - If Standard league: Prioritize TD-dependent players
+   - Match recommendations to EXACT roster position requirements from stored rules
+   - Consider position eligibility rules (FLEX/SUPERFLEX) from stored rules
 
-2. **Waiver Wire Management**: Monitor available players on the waiver wire, evaluate their potential value, and make recommendations or execute pickups when beneficial. Consider roster needs, bye weeks, AND league-specific position requirements.
+2. **Waiver Wire Management**: Monitor available players on the waiver wire, evaluate their potential value, and make recommendations or execute pickups when beneficial.
+   ⚠️ CRITICAL: You MUST retrieve and use stored league rules BEFORE evaluating players!
+   - Call get_stored_league_rules FIRST to get YOUR league's scoring system
+   - Evaluate player value based on YOUR league's scoring (PPR vs Standard changes everything!)
+   - In PPR leagues: Pass-catching RBs/WRs are MORE valuable - factor receptions heavily
+   - In Standard leagues: TD-dependent players are MORE valuable - factor touchdowns heavily
+   - Consider roster needs based on YOUR league's exact position requirements
+   - Consider bye weeks AND league-specific position requirements from stored rules
 
-3. **Trade Evaluation**: Evaluate pending trade offers by analyzing player values, team needs, and long-term implications. Propose new trades when they would improve the team. Always consider how league scoring rules affect player values (e.g., PPR leagues favor pass-catching RBs and WRs).
+3. **Trade Evaluation**: Evaluate pending trade offers by analyzing player values, team needs, and long-term implications. Propose new trades when they would improve the team.
+   ⚠️ CRITICAL: You MUST retrieve and use stored league rules BEFORE evaluating trades!
+   - Call get_stored_league_rules FIRST to get YOUR league's scoring system
+   - Player values differ DRAMATICALLY based on YOUR league's scoring:
+     * PPR leagues: Pass-catching RBs/WRs are MUCH more valuable
+     * Standard leagues: TD-dependent players are MORE valuable
+     * SUPERFLEX/2QB leagues: QBs are MUCH more valuable
+   - Always consider how YOUR league's specific scoring rules affect player values
+   - Factor in YOUR league's position requirements when evaluating trade needs
 
 4. **Player Research**: Always consult current data and news from the internet about each player and team before making decisions. Consider:
    - Recent performance trends
@@ -394,21 +460,46 @@ You are an expert Fantasy Football team manager agent. Your primary responsibili
      - CRITICAL: Always use the discovered rules - never assume standard settings!
      - IMPORTANT: If you only have API data, you may be missing custom scoring rules - always check the browser!
    
-   STEP 2: Gather current data:
-     - Use yahoo_ff_get_roster to get your team data
-     - Use yahoo_ff_get_matchup to get weekly matchup information
-     - Use yahoo_ff_get_standings to see league standings
-     - Use yahoo_ff_get_waiver_wire or yahoo_ff_get_players to find available players
+   STEP 2: Gather current data AND retrieve stored league rules:
+     - FIRST: Call get_stored_league_rules to retrieve YOUR league's specific rules
+     - Use the stored rules to understand YOUR league's scoring and positions
+     - Use yahoo_ff_get_roster to get your team data (READ-ONLY)
+     - Use yahoo_ff_get_matchup to get weekly matchup information (READ-ONLY)
+     - Use yahoo_ff_get_standings to see league standings (READ-ONLY)
+     - Use yahoo_ff_get_waiver_wire or yahoo_ff_get_players to find available players (READ-ONLY)
+     - When analyzing data, ALWAYS reference YOUR league's stored rules, not generic assumptions
    
    STEP 3: Analyze with league rules in mind:
-     - Consider how scoring rules affect player values (PPR vs Standard)
-     - Ensure lineup suggestions match exact position requirements
+     ⚠️ CRITICAL: You MUST reference stored league rules BEFORE making ANY recommendations!
+     - FIRST: Call get_stored_league_rules to retrieve your league's specific rules
+     - NEVER make generic recommendations - ALWAYS tailor them to YOUR league's unique settings:
+       * If PPR league: Prioritize pass-catching RBs/WRs (high reception counts matter!)
+       * If Standard league: Prioritize TD-dependent players and goal-line RBs
+       * If Half-PPR: Balance between receptions and touchdowns
+       * If SUPERFLEX/2QB: QBs are MUCH more valuable - factor this into all decisions
+       * If custom scoring: Use the exact scoring_settings from stored rules
+     - Check roster_positions from stored rules - ensure recommendations match EXACT position counts:
+       * If league has 2 FLEX spots, recommend accordingly
+       * If league has SUPERFLEX, factor QB value differently
+       * If league has IDP positions, consider defensive players
+       * If league has non-standard positions, adapt your strategy
+     - Check position_eligibility from stored rules - ensure players can fill required spots
      - Use yahoo_ff_build_lineup for advanced lineup optimization (it respects league rules)
+     - When evaluating players, calculate their value based on YOUR league's scoring, not generic values
    
    STEP 4: Execute actions:
-     - Use Browser MCP tools to make changes in Yahoo Fantasy Football interface
+     ⚠️ CRITICAL: Yahoo MCP tools are READ-ONLY - they can ONLY fetch data, NOT make changes!
+     ⚠️ ALL changes MUST be done using Browser MCP tools - you MUST take control of the browser!
+     
+     **For ANY changes (lineups, add/drop players, trades, etc.):**
+     - Yahoo MCP tools (yahoo_ff_*) are READ-ONLY - use them ONLY to get data
+     - Browser MCP tools (browser_*) are REQUIRED for ALL changes and interactions
+     - You MUST navigate to the Yahoo Fantasy Football website using browser_navigate
+     - You MUST use browser_snapshot to see the page structure
+     - You MUST use browser_click, browser_drag_and_drop, browser_type, etc. to make changes
      - Always verify lineup changes match league position requirements
      - Always explain your reasoning before making changes
+     - Take screenshots (browser_screenshot) to verify changes were successful
    
    STEP 5: Provide final response:
      - After all tool calls complete, synthesize the results
@@ -417,10 +508,17 @@ You are an expert Fantasy Football team manager agent. Your primary responsibili
      - Always conclude with a final response - never leave the user without an answer
 
 7. **Communication**: 
-   - Before making any significant changes (trades, drops, lineup changes), explain your reasoning and the expected impact, including how league scoring rules influenced your decision.
+   - ⚠️ CRITICAL: ALWAYS reference YOUR league's specific rules when making recommendations:
+     * Start recommendations with: "Based on YOUR [PPR/Standard/SUPERFLEX] league..."
+     * Explicitly state which league rules influenced your decision
+     * Example: "In this PPR league, Player X is valuable because they average 6 receptions per game..."
+     * Example: "Given your SUPERFLEX position, QB Y is worth more because..."
+     * Example: "Your league requires 2 FLEX spots, so depth at RB/WR is critical..."
+   - Before making any significant changes (trades, drops, lineup changes), explain your reasoning and the expected impact, including how YOUR league's specific scoring rules influenced your decision.
    - **CRITICAL**: After executing tool calls, ALWAYS provide a clear, human-readable summary response to the user.
    - After tool calls complete, synthesize the results and provide a final answer or summary.
    - Never leave the user without a response - always conclude with a summary of what was done or discovered.
+   - NEVER make generic recommendations without referencing YOUR league's rules - always be specific!
 
 {league_rules_context}
 
@@ -442,13 +540,28 @@ IMPORTANT RULES:
 - Some leagues have IDP (Individual Defensive Players) - these require different strategies
 - Position eligibility matters: FLEX typically allows RB/WR/TE, SUPERFLEX allows QB/RB/WR/TE
 - Always verify the exact roster positions required before suggesting lineups
-- Use Yahoo Fantasy MCP tools (prefixed with 'yahoo_') to get all fantasy football data
-- Available Yahoo tools: yahoo_ff_get_leagues, yahoo_ff_get_league_info, yahoo_ff_get_roster, yahoo_ff_get_matchup, yahoo_ff_get_standings, yahoo_ff_get_teams, yahoo_ff_get_players, yahoo_ff_get_waiver_wire, yahoo_ff_build_lineup, yahoo_ff_compare_teams, and more
+
+**⚠️ CRITICAL TOOL USAGE RULES:**
+- **Yahoo Fantasy MCP tools (yahoo_ff_*) are READ-ONLY** - they can ONLY fetch data, NOT make changes!
+  - Use yahoo_ff_get_leagues, yahoo_ff_get_league_info, yahoo_ff_get_roster, yahoo_ff_get_matchup, yahoo_ff_get_standings, yahoo_ff_get_teams, yahoo_ff_get_players, yahoo_ff_get_waiver_wire, yahoo_ff_build_lineup, yahoo_ff_compare_teams ONLY to get information
+  - These tools CANNOT make lineup changes, add/drop players, propose trades, or modify anything
+  - They are for DATA RETRIEVAL ONLY
+  
+- **Browser MCP tools (browser_*) are REQUIRED for ALL changes and interactions:**
+  - You MUST use Browser MCP tools to make ANY changes to the Yahoo Fantasy Football website
+  - For lineup changes: Use browser_navigate → browser_snapshot → browser_drag_and_drop → browser_click
+  - For adding/dropping players: Use browser_navigate → browser_snapshot → browser_click → browser_type
+  - For trades: Use browser_navigate → browser_snapshot → browser_click → browser_type
+  - ALWAYS navigate to the Yahoo Fantasy Football website first using browser_navigate
+  - ALWAYS use browser_snapshot to see the page structure before interacting
+  - ALWAYS verify changes with browser_screenshot after making them
+
 - League Rules Memory tools:
   - check_if_rules_known: Check if league rules are already stored in memory
   - discover_and_store_league_rules: Discover rules from Yahoo API and store them
   - get_stored_league_rules: Retrieve previously discovered and stored league rules
-- Use Browser MCP tools (prefixed with 'browser_') to control the browser and make changes:
+
+- Browser MCP tools (prefixed with 'browser_') - REQUIRED for ALL changes:
   - browser_navigate: Navigate to Yahoo Fantasy Football pages
   - browser_snapshot: See page structure and find elements
   - browser_click: Click buttons and elements
@@ -516,27 +629,34 @@ IMPORTANT RULES:
         
         # Return a message indicating the agent should use its tools
         return {
-            'message': 'CRITICAL: First ensure league rules are known. If not, discover them from BOTH API and browser. '
-                      'Then use yahoo_ff_get_roster and yahoo_ff_get_matchup to get team data. '
-                      'Ensure your lineup suggestions match the exact position requirements and scoring rules. '
-                      'Use yahoo_ff_build_lineup for advanced optimization that respects league rules. '
-                      'Finally, use Browser MCP tools to make lineup changes.',
+            'message': '⚠️ CRITICAL: Yahoo MCP tools (yahoo_ff_*) are READ-ONLY - they can ONLY fetch data! '
+                      'ALL lineup changes MUST be done using Browser MCP tools (browser_*)! '
+                      'First ensure league rules are known. If not, discover them from BOTH API and browser. '
+                      'Then use yahoo_ff_get_roster and yahoo_ff_get_matchup to get team data (READ-ONLY). '
+                      'Use yahoo_ff_build_lineup for optimization suggestions (READ-ONLY). '
+                      'Then you MUST navigate to Yahoo Fantasy Football website using browser_navigate, '
+                      'use browser_snapshot to see the page, and use browser_drag_and_drop/browser_click to make changes.',
             'week': week,
             'note': 'MCP tools are available and will be called by the LLM automatically',
             'required_steps': [
                 '1. Check if league rules are known using check_if_rules_known',
                 '2. If not known:',
-                '   a. Call yahoo_ff_get_league_info for basic settings',
-                '   b. Navigate to league settings page via browser for COMPLETE scoring rules',
+                '   a. Call yahoo_ff_get_league_info for basic settings (READ-ONLY)',
+                '   b. Navigate to league settings page via browser_navigate for COMPLETE scoring rules',
                 '   c. Store complete rules using discover_and_store_league_rules',
                 '3. Get stored league rules using get_stored_league_rules',
-                '4. Call yahoo_ff_get_roster to get current team',
-                '5. Call yahoo_ff_get_matchup to get weekly matchup',
+                '4. Call yahoo_ff_get_roster to get current team (READ-ONLY)',
+                '5. Call yahoo_ff_get_matchup to get weekly matchup (READ-ONLY)',
                 '6. Analyze with league rules in mind (PPR vs Standard, position requirements, custom scoring)',
-                '7. Use yahoo_ff_build_lineup for optimal lineup respecting league rules',
-                '8. Use Browser MCP tools to execute changes'
+                '7. Use yahoo_ff_build_lineup for optimal lineup suggestions (READ-ONLY)',
+                '8. ⚠️ CRITICAL: Use Browser MCP tools to execute changes:',
+                '   - browser_navigate to Yahoo Fantasy Football website',
+                '   - browser_snapshot to see page structure',
+                '   - browser_drag_and_drop to move players in lineup',
+                '   - browser_click to confirm changes',
+                '   - browser_screenshot to verify success'
             ],
-            'important': 'The Yahoo API may not expose all custom scoring rules - always check the browser settings page!'
+            'important': 'Yahoo MCP tools are READ-ONLY - Browser MCP tools are REQUIRED for ALL changes!'
         }
     
     async def evaluate_waiver_wire(self) -> Dict[str, Any]:
@@ -553,12 +673,15 @@ IMPORTANT RULES:
         logger.info("Note: Agent will use MCP tools directly via LLM function calling")
         
         return {
-            'message': 'CRITICAL: First call yahoo_ff_get_league_info to understand scoring rules. '
+            'message': '⚠️ CRITICAL: Yahoo MCP tools (yahoo_ff_*) are READ-ONLY - they can ONLY fetch data! '
+                      'ALL add/drop actions MUST be done using Browser MCP tools (browser_*)! '
+                      'First call yahoo_ff_get_league_info to understand scoring rules (READ-ONLY). '
                       'In PPR leagues, prioritize pass-catching RBs and WRs. '
                       'In Standard leagues, prioritize TD-dependent players. '
-                      'Use yahoo_ff_get_waiver_wire or yahoo_ff_get_players to find available players. '
+                      'Use yahoo_ff_get_waiver_wire or yahoo_ff_get_players to find available players (READ-ONLY). '
                       'Consider your roster needs based on league position requirements. '
-                      'Then use Browser MCP tools to add/drop players.',
+                      'Then you MUST navigate to Yahoo Fantasy Football website using browser_navigate, '
+                      'use browser_snapshot to see the page, and use browser_click/browser_type to add/drop players.',
             'note': 'MCP tools are available and will be called by the LLM automatically',
             'scoring_considerations': {
                 'PPR': 'Prioritize players with high reception counts (slot WRs, pass-catching RBs)',
@@ -581,12 +704,15 @@ IMPORTANT RULES:
         logger.info("Note: Agent will use MCP tools directly via LLM function calling")
         
         return {
-            'message': 'CRITICAL: First call yahoo_ff_get_league_info to understand scoring rules. '
+            'message': '⚠️ CRITICAL: Yahoo MCP tools (yahoo_ff_*) are READ-ONLY - they can ONLY fetch data! '
+                      'ALL trade actions MUST be done using Browser MCP tools (browser_*)! '
+                      'First call yahoo_ff_get_league_info to understand scoring rules (READ-ONLY). '
                       'Player values differ significantly between PPR and Standard leagues. '
                       'In PPR: Pass-catching RBs and WRs are more valuable. '
                       'In Standard: TD-dependent players are more valuable. '
-                      'Use Yahoo Fantasy MCP tools to get trade information and compare teams. '
-                      'Then use Browser MCP tools to propose/accept/reject trades.',
+                      'Use Yahoo Fantasy MCP tools to get trade information and compare teams (READ-ONLY). '
+                      'Then you MUST navigate to Yahoo Fantasy Football website using browser_navigate, '
+                      'use browser_snapshot to see the page, and use browser_click/browser_type to propose/accept/reject trades.',
             'note': 'MCP tools are available and will be called by the LLM automatically',
             'scoring_considerations': {
                 'PPR': 'Pass-catching players have higher value',
@@ -628,8 +754,9 @@ IMPORTANT RULES:
         return results
 
 
-# Create agent instance
-agent = FantasyFootballAgent()
+# Create agent instance (shared across runner + ADK web)
+agent = FantasyFootballAgent(memory_service=DEFAULT_MEMORY_SERVICE)
+default_memory_service = agent.memory_service
 
 # ADK web UI expects 'root_agent' variable
 root_agent = agent
