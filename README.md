@@ -2,6 +2,19 @@
 
 An AI-powered agent built with Google ADK (Agent Development Kit) that manages your Yahoo Fantasy Football team. The agent uses LLM reasoning to optimize lineups, evaluate trades, manage waiver wire pickups, and make informed decisions based on current player data and news.
 
+## 🎯 Current Use
+
+This agent is **actively managing** a Yahoo Fantasy Football team in the 2025 season. You can follow along with the journey, see real-world results, and learn about the challenges and successes of AI-powered fantasy football management on **[Dave's Stupid Robot](https://davesstupidrobot.substack.com/)** - a Substack documenting the experience of letting an AI agent manage a fantasy football team.
+
+The Substack covers:
+- Real game results and team performance
+- Agent decision-making processes and reasoning
+- Challenges encountered and how they were solved
+- Insights into agentic AI development
+- Lessons learned from hands-on AI team management
+
+This Google ADK approach is actually version 3 of the football agent, but you can read more about it on the blog.
+
 ## Features
 
 - 🤖 **AI-Powered Decision Making**: Uses Google Gemini to analyze matchups, player performance, and make strategic decisions
@@ -348,6 +361,7 @@ MIT License - feel free to use and modify for your own fantasy football manageme
 
 ## Resources
 
+- **[Dave's Stupid Robot](https://davesstupidrobot.substack.com/)** - Follow the journey of AI-powered fantasy football management
 - [Google ADK Documentation](https://google.github.io/adk-docs/)
 - [Yahoo Fantasy Football MCP Server](https://github.com/derekrbreese/fantasy-football-mcp-public)
 - [Browser MCP](https://browsermcp.io/)
