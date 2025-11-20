@@ -378,7 +378,16 @@ class FantasyFootballAgent(Agent):
                 logger.info("Registered workflow state tracking callbacks")
             except Exception as e:
                 logger.warning(f"Could not register callbacks: {e}")
-    
+        
+        # Register tool error callback to prevent agent stoppage on tool failure
+        # Note: We register this regardless of ADK_CALLBACKS_AVAILABLE because LlmAgent supports it
+        # even if CallbackContext is not exposed in the top-level module
+        try:
+            self.on_tool_error_callback = self._handle_tool_error
+            logger.info("Registered tool error callback")
+        except Exception as e:
+            logger.warning(f"Could not register tool error callback: {e}")
+        
     async def _track_workflow_state_before(self, context: Any) -> None:
         """Track workflow state before agent call - initialize task if needed.
         
@@ -481,6 +490,28 @@ class FantasyFootballAgent(Agent):
                     context.state['temp:task_step'] = 'completing'
                     context.state['task_step'] = 'completing'
     
+    async def _handle_tool_error(self, tool: Any, args: Dict[str, Any], tool_context: Any, error: Exception) -> Dict[str, Any]:
+        """Handle tool execution errors to prevent agent stoppage.
+        
+        Args:
+            tool: The tool that failed
+            args: The arguments passed to the tool
+            tool_context: The tool context
+            error: The exception raised
+            
+        Returns:
+            A dictionary with the error message to be returned to the model
+        """
+        error_msg = f"Tool '{tool.name}' failed with error: {str(error)}"
+        logger.error(error_msg)
+        
+        # Return a structured error response so the model can see what happened and try again
+        return {
+            "error": error_msg,
+            "status": "failed",
+            "suggestion": "Please try again with different arguments or use a different tool."
+        }
+
     @property
     def memory_service(self) -> Optional[BaseMemoryService]:
         """Get the ADK memory service instance."""
@@ -544,7 +575,7 @@ The agent automatically tracks workflow progress in session.state. Key state var
 ⚠️ **CRITICAL TOOL USAGE:**
 - **Yahoo Fantasy MCP tools (yahoo_ff_*) are READ-ONLY** - they can ONLY fetch data, NOT make changes!
 - **Browser MCP tools (browser_*) are REQUIRED for ALL changes** - you MUST take control of the browser!
-- For ANY changes (lineups, add/drop players, trades): Use browser_navigate → browser_snapshot → browser_click/browser_drag_and_drop
+- For ANY changes (lineups, add/drop players, trades): Use browser_navigate → browser_snapshot → browser_click (click to select, then click to move)
 - Yahoo tools are for DATA RETRIEVAL ONLY - Browser tools are for ALL INTERACTIONS AND CHANGES
 
 You are an expert Fantasy Football team manager agent. Your primary responsibilities include:
@@ -729,7 +760,7 @@ You are an expert Fantasy Football team manager agent. Your primary responsibili
      - Browser MCP tools (browser_*) are REQUIRED for ALL changes and interactions
      - You MUST navigate to the Yahoo Fantasy Football website using browser_navigate
      - You MUST use browser_snapshot to see the page structure
-     - You MUST use browser_click, browser_drag_and_drop, browser_type, etc. to make changes
+     - You MUST use browser_click, browser_type, etc. to make changes
      - Always verify lineup changes match league position requirements
      - Always explain your reasoning before making changes
      - Take screenshots (browser_screenshot) to verify changes were successful
@@ -788,7 +819,7 @@ IMPORTANT RULES:
   
 - **Browser MCP tools (browser_*) are REQUIRED for ALL changes and interactions:**
   - You MUST use Browser MCP tools to make ANY changes to the Yahoo Fantasy Football website
-  - For lineup changes: Use browser_navigate → browser_snapshot → browser_drag_and_drop → browser_click
+  - For lineup changes: Use browser_navigate → browser_snapshot → browser_click (click player to move, then click destination)
   - For adding/dropping players: Use browser_navigate → browser_snapshot → browser_click → browser_type
   - For trades: Use browser_navigate → browser_snapshot → browser_click → browser_type
   - ALWAYS navigate to the Yahoo Fantasy Football website first using browser_navigate
@@ -805,7 +836,7 @@ IMPORTANT RULES:
   - browser_snapshot: See page structure and find elements
   - browser_click: Click buttons and elements
   - browser_type: Type text into forms
-  - browser_drag_and_drop: Drag players to set lineup
+  - browser_click: Click buttons and elements (use this to move players - click player then click destination)
   - browser_screenshot: Take screenshots for verification
   - browser_select_option: Select options from dropdowns
   - browser_press_key: Press keyboard keys (Enter, Escape, etc.)
@@ -882,7 +913,7 @@ IMPORTANT RULES:
                       'Then use yahoo_ff_get_roster and yahoo_ff_get_matchup to get team data (READ-ONLY). '
                       'Use YOUR OWN LLM reasoning to analyze the roster, matchups, and league rules to determine the optimal lineup. '
                       'Then you MUST navigate to Yahoo Fantasy Football website using browser_navigate, '
-                      'use browser_snapshot to see the page, and use browser_drag_and_drop/browser_click to make changes.',
+                      'use browser_snapshot to see the page, and use browser_click to make changes (click to select, click to move).',
             'week': week,
             'note': 'MCP tools are available and will be called by the LLM automatically',
             'required_steps': [
@@ -899,7 +930,7 @@ IMPORTANT RULES:
                 '8. ⚠️ CRITICAL: Use Browser MCP tools to execute changes:',
                 '   - browser_navigate to Yahoo Fantasy Football website',
                 '   - browser_snapshot to see page structure',
-                '   - browser_drag_and_drop to move players in lineup',
+                '   - browser_click to move players in lineup (click player, then click destination)',
                 '   - browser_click to confirm changes',
                 '   - browser_screenshot to verify success'
             ],
