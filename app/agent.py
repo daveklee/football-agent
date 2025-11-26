@@ -608,7 +608,13 @@ The agent automatically tracks workflow progress in session.state. Key state var
    - If prompted for 2FA, you MUST stop and ask the user to log in manually.
    - DO NOT give up immediately - try to log in!
 
-2. **NEVER STOP AFTER ONE TOOL CALL!** After EVERY tool call:
+2. **PROJECTION VERIFICATION:**
+   - If you suspect API projections are generic or incorrect, use `verify_player_projections`.
+   - This tool will give you Javascript to run on the Yahoo "My Team" page.
+   - TRUST the scraped projections over the API data if they differ.
+   - This ensures you are using the correct scoring rules for this league.
+
+3. **NEVER STOP AFTER ONE TOOL CALL!** After EVERY tool call:
    - EVALUATE: What did I learn? What's the current state?
    - ASSESS: What have I accomplished? What's left to do?
    - PLAN: What's the next step? What tool should I call next?

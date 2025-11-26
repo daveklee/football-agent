@@ -65,6 +65,7 @@ class BrowserAutomationTools:
             FunctionTool(func=self.reject_trade),
             FunctionTool(func=self.navigate_to_yahoo_fantasy),
             FunctionTool(func=self.take_screenshot),
+            FunctionTool(func=self.verify_player_projections),
         ]
     
     async def navigate_to_yahoo_fantasy(self, url: Optional[str] = None) -> Dict[str, Any]:
@@ -262,5 +263,85 @@ class BrowserAutomationTools:
             }
         except Exception as e:
             logger.error(f"Error taking screenshot: {e}")
+            return {'success': False, 'error': str(e)}
+
+    async def verify_player_projections(self, week: Optional[int] = None) -> Dict[str, Any]:
+        """Verify player projections by scraping the Yahoo Fantasy website.
+        
+        Use this tool when you suspect API projections are incorrect or generic.
+        It provides instructions and code to scrape the actual projections from the web interface.
+        
+        Args:
+            week: Week number to verify (defaults to current week)
+        """
+        try:
+            logger.info(f"Initiating projection verification for week {week}")
+            
+            league_url = f"https://football.fantasysports.yahoo.com/f1/{settings.yahoo_league_id}"
+            if week:
+                team_url = f"{league_url}/team?week={week}"
+            else:
+                team_url = f"{league_url}/team"
+            
+            # Javascript to extract projections
+            # This script finds the player table, iterates rows, and extracts name + projection
+            extraction_script = """
+            (() => {
+                const projections = {};
+                // Find all player rows (usually in the main table)
+                const rows = document.querySelectorAll('table#statTable tbody tr');
+                
+                rows.forEach(row => {
+                    try {
+                        // Find player name
+                        const nameElem = row.querySelector('.ysf-player-name a');
+                        if (!nameElem) return;
+                        const name = nameElem.innerText.trim();
+                        
+                        // Find projection - look for cell with F-proj class
+                        let projElem = row.querySelector('td.F-proj');
+                        
+                        // Fallback: Check for 'Alt' class rows which might have different structure
+                        if (!projElem) {
+                             // Try finding the cell by index if we can identify the header
+                             // For now, let's try a broader selector or just log failure
+                        }
+                        
+                        let proj = 0;
+                        if (projElem) {
+                            proj = parseFloat(projElem.innerText);
+                        }
+                        
+                        if (!isNaN(proj)) {
+                            projections[name] = proj;
+                        }
+                    } catch (e) {
+                        console.error('Error parsing row', e);
+                    }
+                });
+                return projections;
+            })()
+            """
+            
+            return {
+                'success': True,
+                'instructions': 'To verify projections, follow these steps:',
+                'steps': [
+                    {
+                        'action': 'navigate',
+                        'url': team_url,
+                        'description': 'Navigate to your team page for the specific week'
+                    },
+                    {
+                        'action': 'evaluate',
+                        'script': extraction_script,
+                        'description': 'Execute this Javascript to extract projections from the page'
+                    }
+                ],
+                'note': 'Compare the scraped projections with your API data. If they differ, TRUST THE SCRAPED DATA.',
+                'mcp_tools_needed': ['playwright__browser_navigate', 'playwright__browser_evaluate']
+            }
+        except Exception as e:
+            logger.error(f"Error preparing verification: {e}")
             return {'success': False, 'error': str(e)}
 
