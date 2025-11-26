@@ -262,3 +262,61 @@ class EmailSender:
         except Exception as e:
             logger.error(f"Failed to send email: {e}", exc_info=True)
             return False
+
+    def send_lineup_optimization_email(
+        self,
+        agent_responses: List[str],
+        tool_calls: List[Dict[str, str]],
+        session_id: str,
+        event_count: int
+    ) -> bool:
+        """Send formatted lineup optimization summary email.
+        
+        Similar to send_summary_email but with a subject line specific to lineup optimization.
+        
+        Args:
+            agent_responses: List of agent text responses
+            tool_calls: List of tool call dicts
+            session_id: Session ID for this run
+            event_count: Total number of events processed
+            
+        Returns:
+            True if email was sent successfully, False otherwise
+        """
+        if not self.is_configured():
+            logger.warning("Email not configured. Skipping email send.")
+            logger.warning("Set GMAIL_SENDER_EMAIL, GMAIL_APP_PASSWORD, and GMAIL_RECIPIENT_EMAIL in .env")
+            return False
+        
+        try:
+            # Create message
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = f"🏈 Fantasy Football Lineup Optimization - {datetime.now().strftime('%m/%d/%Y')}"
+            msg['From'] = self.sender_email
+            msg['To'] = self.recipient_email
+            
+            # Format HTML content (reuse same formatting method)
+            html_content = self.format_summary_email(
+                agent_responses,
+                tool_calls,
+                session_id,
+                event_count
+            )
+            
+            # Attach HTML part
+            html_part = MIMEText(html_content, 'html')
+            msg.attach(html_part)
+            
+            # Send email
+            logger.info(f"Sending lineup optimization email to {self.recipient_email}...")
+            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
+                server.starttls()
+                server.login(self.sender_email, self.app_password)
+                server.send_message(msg)
+            
+            logger.info("Lineup optimization email sent successfully!")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to send lineup optimization email: {e}", exc_info=True)
+            return False
