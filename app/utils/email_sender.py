@@ -4,8 +4,11 @@ import smtplib
 import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.image import MIMEImage
 from datetime import datetime
 from typing import Dict, List, Optional, Any
+import re
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +25,76 @@ class EmailSender:
         # Gmail SMTP configuration
         self.smtp_server = 'smtp.gmail.com'
         self.smtp_port = 587
+        
+        # Track embedded images for the email
+        self.embedded_images = {}
+    
+    def _markdown_to_html(self, text: str) -> str:
+        """Convert common markdown patterns to HTML.
+        
+        Args:
+            text: Markdown text
+            
+        Returns:
+            HTML formatted text
+        """
+        if not text:
+            return ""
+        
+        # Bold (**text** or __text__)
+        text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+        text = re.sub(r'__(.+?)__', r'<strong>\1</strong>', text)
+        
+        # Italic (*text* or _text_)
+        text = re.sub(r'\*([^*]+?)\*', r'<em>\1</em>', text)
+        text = re.sub(r'_([^_]+?)_', r'<em>\1</em>', text)
+        
+        # Code (`code`)
+        text = re.sub(r'`([^`]+?)`', r'<code>\1</code>', text)
+        
+        # Links [text](url)
+        text = re.sub(r'\[([^\]]+?)\]\(([^)]+?)\)', r'<a href="\2">\1</a>', text)
+        
+        # Images ![alt](url) - handle specially for email embedding
+        def replace_image(match):
+            alt = match.group(1)
+            url = match.group(2)
+            # Generate a content ID for the image
+            cid = f"img_{len(self.embedded_images)}"
+            self.embedded_images[cid] = url
+            return f'<img src="cid:{cid}" alt="{alt}" style="max-width: 100%; height: auto; margin: 10px 0;" />'
+        
+        text = re.sub(r'!\[([^\]]*?)\]\(([^)]+?)\)', replace_image, text)
+        
+        # Headers (# Header)
+        text = re.sub(r'^### (.+)$', r'<h3>\1</h3>', text, flags=re.MULTILINE)
+        text = re.sub(r'^## (.+)$', r'<h2>\1</h2>', text, flags=re.MULTILINE)
+        text = re.sub(r'^# (.+)$', r'<h1>\1</h1>', text, flags=re.MULTILINE)
+        
+        # Line breaks
+        text = text.replace('\n\n', '<br><br>')
+        text = text.replace('\n', '<br>')
+        
+        # Bullet lists (simple version)
+        lines = text.split('<br>')
+        in_list = False
+        result = []
+        for line in lines:
+            if line.strip().startswith('* ') or line.strip().startswith('- '):
+                if not in_list:
+                    result.append('<ul>')
+                    in_list = True
+                item = line.strip()[2:]
+                result.append(f'<li>{item}</li>')
+            else:
+                if in_list:
+                    result.append('</ul>')
+                    in_list = False
+                result.append(line)
+        if in_list:
+            result.append('</ul>')
+        
+        return '<br>'.join(result)
         
     def is_configured(self) -> bool:
         """Check if email is properly configured."""
@@ -239,10 +312,11 @@ class EmailSender:
             html += f'<div class="log-timestamp">{timestamp}</div>\n'
             
             if entry_type == 'text':
-                # Clean up text
+                # Convert markdown to HTML
                 cleaned = content.strip() if content else ""
                 if cleaned:
-                    html += f'<div class="agent-thought">{cleaned}</div>\n'
+                    html_content = self._markdown_to_html(cleaned)
+                    html += f'\u003cdiv class=\"agent-thought\"\u003e{html_content}\u003c/div\u003e\\n'
             elif entry_type == 'tool':
                 name = entry.get('name', 'Unknown Tool')
                 args = entry.get('args', '')
@@ -335,14 +409,17 @@ class EmailSender:
             return False
         
         try:
-            # Create message
-            msg = MIMEMultipart('alternative')
+            # reset embedded images for this email
+            self.embedded_images = {}
+            
+            # Create message with mixed type to support both HTML and images
+            msg = MIMEMultipart('related')
             status = "❌ FAILED" if error_details else "✅ SUCCESS"
             msg['Subject'] = f"{status}: {subject_prefix} - {datetime.now().strftime('%m/%d/%Y')}"
             msg['From'] = self.sender_email
             msg['To'] = self.recipient_email
             
-            # Format HTML content
+            # Format HTML content (this populates self.embedded_images)
             html_content = self.format_detailed_email(
                 execution_log,
                 session_id,
@@ -351,9 +428,32 @@ class EmailSender:
                 title
             )
             
+            # Create alternative part for HTML
+            msg_alternative = MIMEMultipart('alternative')
+            msg.attach(msg_alternative)
+            
             # Attach HTML part
             html_part = MIMEText(html_content, 'html')
-            msg.attach(html_part)
+            msg_alternative.attach(html_part)
+            
+            # Attach embedded images
+            for cid, image_path in self.embedded_images.items():
+                try:
+                    # Handle sandbox:/ paths (these are Playwright screenshots)
+                    if image_path.startswith('sandbox:/'):
+                        # These are typically stored temporarily by Playwright
+                        # For now, we'll skip embedding them as they may not be accessible
+                        logger.warning(f"Skipping sandbox image: {image_path}")
+                        continue
+                    elif os.path.exists(image_path):
+                        # Local file path
+                        with open(image_path, 'rb') as f:
+                            img_data = f.read()
+                        image = MIMEImage(img_data)
+                        image.add_header('Content-ID', f'<{cid}>')
+                        msg.attach(image)
+                except Exception as e:
+                    logger.warning(f"Failed to embed image {image_path}: {e}")
             
             # Send email
             logger.info(f"Sending email to {self.recipient_email}...")

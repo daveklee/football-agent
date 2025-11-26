@@ -49,7 +49,14 @@ class DatabaseLeagueRulesMemory:
     
     def _normalize_rules(self, league_id: str, league_info: Dict[str, Any]) -> Dict[str, Any]:
         """Normalize league info into a standard format."""
-        league_name = league_info.get("league") or league_info.get("name", "")
+        # Extract league name safely - handle both string and dict
+        league_name_value = league_info.get("league") or league_info.get("name", "")
+        if isinstance(league_name_value, dict):
+            # If it's a dict, try to get the 'name' key from it
+            league_name = league_name_value.get("name", str(league_name_value.get("key", "")))
+        else:
+            league_name = str(league_name_value) if league_name_value else ""
+        
         return {
             "league_id": league_id,
             "scoring_type": league_info.get("scoring_type", "Unknown"),
