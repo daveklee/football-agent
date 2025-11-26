@@ -284,6 +284,10 @@ class EmailSender:
             entry_type = entry.get('type')
             content = entry.get('content')
             
+            # Debug log to verify we are processing text entries
+            if entry_type == 'text':
+                logger.debug(f"Processing text entry length: {len(content) if content else 0}")
+            
             html += f'<div class="log-entry">\n'
             html += f'<div class="log-timestamp">{timestamp}</div>\n'
             
@@ -292,7 +296,7 @@ class EmailSender:
                 cleaned = content.strip() if content else ""
                 if cleaned:
                     html_content = self._markdown_to_html(cleaned)
-                    html += f'\u003cdiv class=\"agent-thought\"\u003e{html_content}\u003c/div\u003e\\n'
+                    html += f'<div class="agent-thought">{html_content}</div>\n'
             elif entry_type == 'tool':
                 name = entry.get('name', 'Unknown Tool')
                 args = entry.get('args', '')
