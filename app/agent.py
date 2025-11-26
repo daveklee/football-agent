@@ -265,37 +265,50 @@ class FantasyFootballAgent(Agent):
                         import traceback
                         logger.debug(traceback.format_exc())
                 
-                # Add Browser MCP server
-                # Browser MCP uses a Chrome extension - make sure it's installed: https://browsermcp.io/install
-                if 'browsermcp' in mcp_config.get('mcpServers', {}):
-                    browser_config = mcp_config['mcpServers']['browsermcp']
+                # Add Playwright MCP server
+                # Playwright MCP uses npx to run the server
+                if 'playwright' in mcp_config.get('mcpServers', {}):
+                    playwright_config = mcp_config['mcpServers']['playwright']
                     
                     try:
-                        browser_params = StdioServerParameters(
-                            command=browser_config['command'],
-                            args=browser_config.get('args', [])
+                        # Process config env vars
+                        playwright_env = {}
+                        config_env = playwright_config.get('env', {})
+                        for key, value in config_env.items():
+                            if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+                                env_var_name = value[2:-1]
+                                env_value = os.environ.get(env_var_name)
+                                if env_value is not None:
+                                    playwright_env[key] = env_value
+                            else:
+                                if key not in os.environ:
+                                    playwright_env[key] = value
+                        
+                        # Merge with current environment
+                        final_playwright_env = os.environ.copy()
+                        final_playwright_env.update(playwright_env)
+                        
+                        playwright_params = StdioServerParameters(
+                            command=playwright_config['command'],
+                            args=playwright_config.get('args', []),
+                            env=final_playwright_env
                         )
                         
                         # Use StdioConnectionParams for consistency
-                        browser_connection = StdioConnectionParams(
-                            server_params=browser_params,
+                        playwright_connection = StdioConnectionParams(
+                            server_params=playwright_params,
                             timeout=60.0  # Increased timeout for server startup
                         )
                         
-                        browser_toolset = McpToolset(
-                            connection_params=browser_connection,
-                            tool_name_prefix='browser_'
+                        playwright_toolset = McpToolset(
+                            connection_params=playwright_connection,
+                            tool_name_prefix='playwright_'
                         )
-                        all_tools.append(browser_toolset)
-                        logger.info("Browser MCP toolset added successfully")
-                        logger.info("⚠️  Make sure Browser MCP Chrome extension is installed: https://browsermcp.io/install")
+                        all_tools.append(playwright_toolset)
+                        logger.info("Playwright MCP toolset added successfully")
                     except Exception as e:
-                        logger.error(f"Browser MCP toolset failed to initialize: {e}")
-                        logger.error("Browser MCP will not be available")
-                        logger.info("Make sure:")
-                        logger.info("  1. Browser MCP Chrome extension is installed: https://browsermcp.io/install")
-                        logger.info("  2. Node.js is installed (for npx)")
-                        logger.info("  3. Package @browsermcp/mcp is accessible via npx")
+                        logger.error(f"Playwright MCP toolset failed to initialize: {e}")
+                        logger.error("Playwright MCP will not be available")
                         import traceback
                         logger.debug(traceback.format_exc())
             else:
@@ -468,7 +481,7 @@ class FantasyFootballAgent(Agent):
                             context.state['data_gathered'] = data_gathered
                 
                 # Detect browser actions (executing changes)
-                if 'browser_' in event_str and ('navigate' in event_str or 'click' in event_str or 'drag' in event_str):
+                if 'playwright_' in event_str and ('navigate' in event_str or 'click' in event_str or 'fill' in event_str):
                     context.state['temp:has_browser_actions'] = True
             
             # Update task step based on progress (using temp: prefix for session-scoped state)
@@ -547,7 +560,7 @@ The agent automatically tracks workflow progress in session.state. Key state var
 - The workflow progresses through these steps automatically as you call tools
 - If you're in 'gathering_data' step, focus on collecting necessary data (league rules, roster, matchup)
 - If you're in 'analyzing' step, you should have all data and be making recommendations
-- If you're in 'executing_actions' step, you should be making changes via Browser MCP
+- If you're in 'executing_actions' step, you should be making changes via Playwright MCP
 - If you're in 'completing' step, wrap up and provide final summary
 - State is updated automatically - you don't need to manually update it, but you can reference it to know where you are
 """
@@ -574,9 +587,9 @@ The agent automatically tracks workflow progress in session.state. Key state var
 
 ⚠️ **CRITICAL TOOL USAGE:**
 - **Yahoo Fantasy MCP tools (yahoo_ff_*) are READ-ONLY** - they can ONLY fetch data, NOT make changes!
-- **Browser MCP tools (browser_*) are REQUIRED for ALL changes** - you MUST take control of the browser!
-- For ANY changes (lineups, add/drop players, trades): Use browser_navigate → browser_snapshot → browser_click (click to select, then click to move)
-- Yahoo tools are for DATA RETRIEVAL ONLY - Browser tools are for ALL INTERACTIONS AND CHANGES
+- **Playwright MCP tools (playwright_*) are REQUIRED for ALL changes** - you MUST take control of the browser!
+- For ANY changes (lineups, add/drop players, trades): Use playwright_navigate → playwright_screenshot → playwright_click (click to select, then click to move)
+- Yahoo tools are for DATA RETRIEVAL ONLY - Playwright tools are for ALL INTERACTIONS AND CHANGES
 
 You are an expert Fantasy Football team manager agent. Your primary responsibilities include:
 
@@ -685,10 +698,10 @@ You are an expert Fantasy Football team manager agent. Your primary responsibili
        * The Yahoo API may NOT expose all custom scoring rules
        * **AFTER API discovery: EVALUATE → Do I need browser data? → CONTINUE to browser**
        * You MUST navigate to the league scoring details page to discover complete scoring rules:
-         - Use browser_navigate to go to: https://football.fantasysports.yahoo.com/f1/<league_id>/settings
+         - Use playwright_navigate to go to: https://football.fantasysports.yahoo.com/f1/<league_id>/settings
          - Or navigate to: https://football.fantasysports.yahoo.com/f1/<league_id>/settings?tab=scoring
          - Replace <league_id> with the actual league ID from your configuration
-       * Use browser_snapshot to see the page structure
+       * Use playwright_screenshot to see the page structure (Playwright doesn't have snapshot, use screenshot or evaluate_script if needed, but screenshot is best for visual verification)
        * Look for scoring settings sections that show:
          - Points per reception (PPR) - may be 0, 0.5, or 1.0
          - Points per passing yard, rushing yard, receiving yard
@@ -699,7 +712,7 @@ You are an expert Fantasy Football team manager agent. Your primary responsibili
          - Any custom scoring bonuses or penalties
          - Kicker scoring details
          - Defense/ST scoring details
-       * Use browser_screenshot if needed to capture scoring details
+       * Use playwright_screenshot if needed to capture scoring details
        * Read all scoring categories carefully - there may be custom rules not in the API
        
        **C. Store Complete Rules:**
@@ -757,13 +770,13 @@ You are an expert Fantasy Football team manager agent. Your primary responsibili
      
      **For ANY changes (lineups, add/drop players, trades, etc.):**
      - Yahoo MCP tools (yahoo_ff_*) are READ-ONLY - use them ONLY to get data
-     - Browser MCP tools (browser_*) are REQUIRED for ALL changes and interactions
-     - You MUST navigate to the Yahoo Fantasy Football website using browser_navigate
-     - You MUST use browser_snapshot to see the page structure
-     - You MUST use browser_click, browser_type, etc. to make changes
+     - Playwright MCP tools (playwright_*) are REQUIRED for ALL changes and interactions
+     - You MUST navigate to the Yahoo Fantasy Football website using playwright_navigate
+     - You MUST use playwright_screenshot to see the page structure
+     - You MUST use playwright_click, playwright_fill, etc. to make changes
      - Always verify lineup changes match league position requirements
      - Always explain your reasoning before making changes
-     - Take screenshots (browser_screenshot) to verify changes were successful
+     - Take screenshots (playwright_screenshot) to verify changes were successful
      - **AFTER each action: EVALUATE if more actions are needed, then CONTINUE**
    
    STEP 6: Provide final response:
@@ -795,7 +808,7 @@ IMPORTANT RULES:
 - ALWAYS check if league rules are known using check_if_rules_known FIRST
 - If rules are NOT known, you MUST discover them COMPLETELY:
   * Use yahoo_ff_get_league_info for basic league settings (roster positions, etc.)
-  * Use Browser MCP to navigate to league settings page for COMPLETE scoring rules
+  * Use Playwright MCP to navigate to league settings page for COMPLETE scoring rules
   * The Yahoo API may not expose all custom scoring - browser discovery is CRITICAL
 - NEVER assume standard scoring or roster positions - every league is different
 - After discovering rules, store them using discover_and_store_league_rules so you remember them

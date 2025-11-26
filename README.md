@@ -361,19 +361,27 @@ MIT License - feel free to use and modify for your own fantasy football manageme
 
 ## Resources
 
-- **[Dave's Stupid Robot](https://davesstupidrobot.substack.com/)** - Follow the journey of AI-powered fantasy football management
-- [Google ADK Documentation](https://google.github.io/adk-docs/)
-- [Yahoo Fantasy Football MCP Server](https://github.com/derekrbreese/fantasy-football-mcp-public)
-- [Browser MCP](https://browsermcp.io/)
-- [Model Context Protocol](https://modelcontextprotocol.io/)
+-   **[Dave's Stupid Robot](https://davesstupidrobot.substack.com/)** - Follow the journey of AI-powered fantasy football management
+-   [Google ADK Documentation](https://google.github.io/adk-docs/)
+-   [Yahoo Fantasy Football MCP Server](https://github.com/derekrbreese/fantasy-football-mcp-public)
+-   [Playwright MCP](https://playwrightmcp.io/)
+-   [Model Context Protocol](https://modelcontextprotocol.io/)
+
+### 3. Configure MCP Servers
+
+This agent uses MCP (Model Context Protocol) to connect to external tools:
+- **Yahoo Fantasy MCP**: Connects to Yahoo Fantasy API
+- **Playwright MCP**: Connects to a browser for automation
+
+Ensure `mcp_config.json` is configured correctly. See [PLAYWRIGHT_MCP_INFO.md](docs/PLAYWRIGHT_MCP_INFO.md) for browser automation details.
 
 ## Documentation
 
-- [Quick Start Guide](QUICKSTART.md) - Get started quickly
-- [MCP Server Info](docs/MCP_SERVER_INFO.md) - Yahoo Fantasy MCP Server details
-- [Browser MCP Info](docs/BROWSER_MCP_INFO.md) - Browser automation setup
-- [Port Configuration](docs/PORT_CONFIGURATION.md) - Port usage details
-- [Troubleshooting](docs/TROUBLESHOOTING.md) - Common issues and solutions
+-   [Quick Start Guide](QUICKSTART.md) - Get started quickly
+-   [MCP Server Info](docs/MCP_SERVER_INFO.md) - Yahoo Fantasy MCP Server details
+-   [Playwright MCP Info](docs/PLAYWRIGHT_MCP_INFO.md) - Browser automation setup
+-   [Port Configuration](docs/PORT_CONFIGURATION.md) - Port usage details
+-   [Troubleshooting](docs/TROUBLESHOOTING.md) - Common issues and solutions
 
 ## Support
 

@@ -14,13 +14,15 @@
         "YAHOO_GUID": "${YAHOO_GUID}"
       }
     },
-    "browsermcp": {
+    "playwright": {
       "command": "npx",
       "args": [
-        "-y",
-        "@conradkoh/browsermcp"
-      ]
+        "@playwright/mcp@latest",
+        "--extension"
+      ],
+      "env": {
+        "PLAYWRIGHT_MCP_EXTENSION_TOKEN": "pIpVFFp0I6yQe-GRU3QYf3cY4y1JlGHx_VdEiyi_YGk"
+      }
     }
   }
 }
-
