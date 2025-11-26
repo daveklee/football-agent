@@ -44,6 +44,15 @@ except ImportError:
         CallbackContext = Any  # type: ignore
         logging.warning("Google ADK not found. Using fallback implementation.")
 
+try:
+    from google.adk.tools.agent_tool import AgentTool
+    AGENT_TOOL_AVAILABLE = True
+except ImportError:
+    AGENT_TOOL_AVAILABLE = False
+    logger.warning("AgentTool not available in ADK.")
+
+from app.research_agent import ResearchAgent
+
 import google.generativeai as genai
 
 from app.utils.config import settings
@@ -328,6 +337,16 @@ class FantasyFootballAgent(Agent):
         # If you need web search, use it via MCP or a separate agent.
         # if GoogleSearch:
         #     all_tools.append(GoogleSearch())
+        
+        # Add Research Agent as a tool
+        if AGENT_TOOL_AVAILABLE:
+            try:
+                research_agent = ResearchAgent(model_name=settings.model_name)
+                research_tool = AgentTool(agent=research_agent)
+                all_tools.append(research_tool)
+                logger.info("Added ResearchAgent as a tool")
+            except Exception as e:
+                logger.error(f"Failed to add ResearchAgent tool: {e}")
         
         # Initialize agent with tools (Pro supports function calling)
         # Explicitly create Gemini LLM instance to ensure model is set correctly
@@ -621,14 +640,14 @@ You are an expert Fantasy Football team manager agent. Your primary responsibili
    - Always consider how YOUR league's specific scoring rules affect player values
    - Factor in YOUR league's position requirements when evaluating trade needs
 
-4. **Player Research**: Always consult current data and news from the internet about each player and team before making decisions. Consider:
-   - Recent performance trends
-   - Injury reports and status
-   - Matchup difficulty
-   - Weather conditions
-   - Team news and depth chart changes
-   - Expert analysis and projections
-   - How league scoring rules affect player value (e.g., PPR scoring makes receptions valuable)
+4. **Player Research**: Always consult current data and news from the internet about each player and team before making decisions.
+   - **USE THE 'research_agent' TOOL** for all general knowledge and web search queries.
+   - Do NOT try to use google_search directly (it is encapsulated in the research_agent).
+   - Ask the research_agent specific questions like:
+     * "What is the latest injury news for Christian McCaffrey?"
+     * "What is the weather forecast for the Chiefs vs Bills game?"
+     * "Who is the backup RB for the Dolphins?"
+   - Use the information returned by the research_agent to inform your decisions.
 
 5. **League Rules Compliance**: This is CRITICAL. You MUST:
    - ALWAYS fetch league rules using yahoo_ff_get_league_info BEFORE making any decisions
