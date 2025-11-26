@@ -5,7 +5,7 @@ import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 logger = logging.getLogger(__name__)
 
@@ -27,45 +27,48 @@ class EmailSender:
         """Check if email is properly configured."""
         return all([self.sender_email, self.app_password, self.recipient_email])
     
-    def format_summary_email(
+    def format_detailed_email(
         self,
-        agent_responses: List[str],
-        tool_calls: List[Dict[str, str]],
+        execution_log: List[Dict[str, Any]],
         session_id: str,
-        event_count: int
+        event_count: int,
+        error_details: Optional[str] = None,
+        title: str = "Fantasy Football Summary"
     ) -> str:
-        """Format the agent summary into an HTML email.
+        """Format the agent execution log into a detailed HTML email.
         
         Args:
-            agent_responses: List of agent text responses
-            tool_calls: List of tool call dicts with 'name' and optional 'args'
+            execution_log: List of execution events (text or tool calls)
             session_id: Session ID for this run
             event_count: Total number of events processed
+            error_details: Optional string containing error traceback or details
+            title: Email title
             
         Returns:
             HTML formatted email body
         """
-        # Extract key actions
+        # Extract key actions for the summary section
         lineup_changes = []
         trades = []
         waiver_wire = []
         injuries = []
         other_actions = []
         
-        for call in tool_calls:
-            name = call.get('name', '')
-            if 'lineup' in name.lower() or 'optimize' in name.lower():
-                lineup_changes.append(call)
-            elif 'trade' in name.lower():
-                trades.append(call)
-            elif 'waiver' in name.lower() or 'pickup' in name.lower():
-                waiver_wire.append(call)
-            elif 'injury' in name.lower() or 'ir' in name.lower():
-                injuries.append(call)
-            elif 'playwright' in name.lower() or 'navigate' in name.lower() or 'click' in name.lower():
-                # Browser actions - likely making changes
-                other_actions.append(call)
-        
+        for event in execution_log:
+            if event.get('type') == 'tool':
+                name = event.get('name', '')
+                # Only count "write" actions or significant analysis tools
+                if 'playwright' in name.lower() and ('click' in name.lower() or 'type' in name.lower()):
+                     other_actions.append(event)
+                elif 'lineup' in name.lower() or 'optimize' in name.lower():
+                    lineup_changes.append(event)
+                elif 'trade' in name.lower():
+                    trades.append(event)
+                elif 'waiver' in name.lower() or 'pickup' in name.lower():
+                    waiver_wire.append(event)
+                elif 'injury' in name.lower() or 'ir' in name.lower():
+                    injuries.append(event)
+
         # Build HTML email
         html = f"""
 <!DOCTYPE html>
@@ -76,7 +79,7 @@ class EmailSender:
             font-family: 'Helvetica Neue', Arial, sans-serif;
             line-height: 1.6;
             color: #333;
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
             padding: 20px;
             background-color: #f5f5f5;
@@ -97,37 +100,67 @@ class EmailSender:
             margin-top: 30px;
             border-left: 4px solid #1a73e8;
             padding-left: 10px;
+            background-color: #f8f9fa;
+            padding: 10px;
         }}
-        .summary {{
+        .summary-box {{
             background-color: #e8f0fe;
             border-left: 4px solid #1a73e8;
             padding: 15px;
             margin: 20px 0;
             border-radius: 4px;
         }}
-        .action-item {{
-            background-color: #f8f9fa;
-            border-left: 3px solid #34a853;
-            padding: 10px 15px;
-            margin: 10px 0;
+        .error-box {{
+            background-color: #fce8e6;
+            border-left: 4px solid #ea4335;
+            padding: 15px;
+            margin: 20px 0;
             border-radius: 4px;
+            color: #c5221f;
         }}
-        .tool-call {{
+        .error-trace {{
             font-family: 'Courier New', monospace;
-            background-color: #f1f3f4;
-            padding: 5px 10px;
-            border-radius: 3px;
-            display: inline-block;
-            margin: 5px 0;
-            font-size: 0.9em;
+            white-space: pre-wrap;
+            font-size: 0.85em;
+            background-color: #fff;
+            padding: 10px;
+            border: 1px solid #f5c6cb;
+            border-radius: 4px;
+            margin-top: 10px;
+            overflow-x: auto;
         }}
-        .response {{
+        .log-entry {{
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }}
+        .log-timestamp {{
+            color: #888;
+            font-size: 0.8em;
+            margin-bottom: 5px;
+        }}
+        .agent-thought {{
             background-color: #fef7e0;
             border-left: 3px solid #f9ab00;
             padding: 15px;
-            margin: 15px 0;
             border-radius: 4px;
-            font-style: italic;
+        }}
+        .tool-call {{
+            background-color: #f1f3f4;
+            border-left: 3px solid #5f6368;
+            padding: 10px 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }}
+        .tool-name {{
+            font-weight: bold;
+            color: #1a73e8;
+        }}
+        .tool-args {{
+            color: #555;
+            margin-top: 5px;
+            white-space: pre-wrap;
         }}
         .metadata {{
             color: #5f6368;
@@ -136,67 +169,92 @@ class EmailSender:
             padding-top: 20px;
             border-top: 1px solid #e0e0e0;
         }}
-        .no-actions {{
-            color: #5f6368;
-            font-style: italic;
-        }}
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🏈 Fantasy Football Daily Summary</h1>
+        <h1>{title}</h1>
         
-        <div class="summary">
+        <div class="summary-box">
             <strong>Run Date:</strong> {datetime.now().strftime('%B %d, %Y at %I:%M %p')}<br>
             <strong>Session ID:</strong> {session_id}<br>
             <strong>Events Processed:</strong> {event_count}
         </div>
 """
         
-        # Lineup Changes
+        # Error Section
+        if error_details:
+            html += f"""
+        <div class="error-box">
+            <h3>❌ Run Failed with Error</h3>
+            <p>The agent encountered a problem during execution:</p>
+            <div class="error-trace">{error_details}</div>
+        </div>
+"""
+
+        # Executive Summary of Changes
+        html += "<h2>📊 Executive Summary</h2>\n"
+        
+        has_changes = False
         if lineup_changes:
-            html += "<h2>📋 Lineup Optimizations</h2>\n"
-            for call in lineup_changes:
-                html += f'<div class="action-item"><span class="tool-call">{call["name"]}</span></div>\n'
-        
-        # Trades
+            html += "<h3>📋 Lineup Changes</h3><ul>"
+            for item in lineup_changes:
+                html += f"<li>Called <code>{item.get('name')}</code></li>"
+            html += "</ul>"
+            has_changes = True
+            
         if trades:
-            html += "<h2>🤝 Trade Actions</h2>\n"
-            for call in trades:
-                html += f'<div class="action-item"><span class="tool-call">{call["name"]}</span></div>\n'
-        
-        # Waiver Wire
+            html += "<h3>🤝 Trade Actions</h3><ul>"
+            for item in trades:
+                html += f"<li>Called <code>{item.get('name')}</code></li>"
+            html += "</ul>"
+            has_changes = True
+            
         if waiver_wire:
-            html += "<h2>🔄 Waiver Wire Actions</h2>\n"
-            for call in waiver_wire:
-                html += f'<div class="action-item"><span class="tool-call">{call["name"]}</span></div>\n'
-        
-        # Injuries
-        if injuries:
-            html += "<h2>🏥 Injury Management</h2>\n"
-            for call in injuries:
-                html += f'<div class="action-item"><span class="tool-call">{call["name"]}</span></div>\n'
-        
-        # Other Actions
+            html += "<h3>🔄 Waiver Wire</h3><ul>"
+            for item in waiver_wire:
+                html += f"<li>Called <code>{item.get('name')}</code></li>"
+            html += "</ul>"
+            has_changes = True
+            
         if other_actions:
-            html += "<h2>⚙️ Other Actions</h2>\n"
-            for call in other_actions:
-                html += f'<div class="action-item"><span class="tool-call">{call["name"]}</span></div>\n'
+            html += "<h3>⚙️ Browser Actions</h3><ul>"
+            for item in other_actions:
+                html += f"<li>Called <code>{item.get('name')}</code></li>"
+            html += "</ul>"
+            has_changes = True
+            
+        if not has_changes:
+            html += "<p><em>No significant write actions (changes) were detected in this run.</em></p>"
+
+        # Detailed Execution Log
+        html += "<h2>📝 Detailed Execution Log</h2>\n"
         
-        # Agent Responses
-        if agent_responses:
-            html += "<h2>💬 Agent Reasoning & Summary</h2>\n"
-            for response in agent_responses[:5]:  # Limit to first 5 responses
-                # Clean up response text
-                cleaned = response.strip()
+        for entry in execution_log:
+            timestamp = entry.get('timestamp', '')
+            entry_type = entry.get('type')
+            content = entry.get('content')
+            
+            html += f'<div class="log-entry">\n'
+            html += f'<div class="log-timestamp">{timestamp}</div>\n'
+            
+            if entry_type == 'text':
+                # Clean up text
+                cleaned = content.strip() if content else ""
                 if cleaned:
-                    html += f'<div class="response">{cleaned}</div>\n'
-        
-        # If no significant actions
-        if not (lineup_changes or trades or waiver_wire or injuries):
-            html += '<p class="no-actions">No significant lineup or roster changes were needed this week.</p>\n'
-        
-        # Metadata footer
+                    html += f'<div class="agent-thought">{cleaned}</div>\n'
+            elif entry_type == 'tool':
+                name = entry.get('name', 'Unknown Tool')
+                args = entry.get('args', '')
+                html += f'<div class="tool-call">\n'
+                html += f'<div class="tool-name">🔧 {name}</div>\n'
+                if args:
+                    html += f'<div class="tool-args">{args}</div>\n'
+                html += f'</div>\n'
+            
+            html += f'</div>\n'
+
+        # Footer
         html += f"""
         <div class="metadata">
             <em>This summary was automatically generated by your Fantasy Football Agent.</em>
@@ -209,22 +267,68 @@ class EmailSender:
     
     def send_summary_email(
         self,
-        agent_responses: List[str],
-        tool_calls: List[Dict[str, str]],
+        execution_log: List[Dict[str, Any]],
         session_id: str,
-        event_count: int
+        event_count: int,
+        error_details: Optional[str] = None
     ) -> bool:
         """Send formatted summary email.
         
         Args:
-            agent_responses: List of agent text responses
-            tool_calls: List of tool call dicts
+            execution_log: List of execution events
             session_id: Session ID for this run
             event_count: Total number of events processed
+            error_details: Optional error details
             
         Returns:
             True if email was sent successfully, False otherwise
         """
+        return self._send_email(
+            execution_log, 
+            session_id, 
+            event_count, 
+            error_details, 
+            title="🏈 Fantasy Football Daily Summary",
+            subject_prefix="Daily Summary"
+        )
+
+    def send_lineup_optimization_email(
+        self,
+        execution_log: List[Dict[str, Any]],
+        session_id: str,
+        event_count: int,
+        error_details: Optional[str] = None
+    ) -> bool:
+        """Send formatted lineup optimization summary email.
+        
+        Args:
+            execution_log: List of execution events
+            session_id: Session ID for this run
+            event_count: Total number of events processed
+            error_details: Optional error details
+            
+        Returns:
+            True if email was sent successfully, False otherwise
+        """
+        return self._send_email(
+            execution_log, 
+            session_id, 
+            event_count, 
+            error_details, 
+            title="🏈 Fantasy Football Lineup Optimization",
+            subject_prefix="Lineup Optimization"
+        )
+
+    def _send_email(
+        self,
+        execution_log: List[Dict[str, Any]],
+        session_id: str,
+        event_count: int,
+        error_details: Optional[str],
+        title: str,
+        subject_prefix: str
+    ) -> bool:
+        """Internal method to send email."""
         if not self.is_configured():
             logger.warning("Email not configured. Skipping email send.")
             logger.warning("Set GMAIL_SENDER_EMAIL, GMAIL_APP_PASSWORD, and GMAIL_RECIPIENT_EMAIL in .env")
@@ -233,16 +337,18 @@ class EmailSender:
         try:
             # Create message
             msg = MIMEMultipart('alternative')
-            msg['Subject'] = f"🏈 Fantasy Football Daily Summary - {datetime.now().strftime('%m/%d/%Y')}"
+            status = "❌ FAILED" if error_details else "✅ SUCCESS"
+            msg['Subject'] = f"{status}: {subject_prefix} - {datetime.now().strftime('%m/%d/%Y')}"
             msg['From'] = self.sender_email
             msg['To'] = self.recipient_email
             
             # Format HTML content
-            html_content = self.format_summary_email(
-                agent_responses,
-                tool_calls,
+            html_content = self.format_detailed_email(
+                execution_log,
                 session_id,
-                event_count
+                event_count,
+                error_details,
+                title
             )
             
             # Attach HTML part
@@ -261,62 +367,4 @@ class EmailSender:
             
         except Exception as e:
             logger.error(f"Failed to send email: {e}", exc_info=True)
-            return False
-
-    def send_lineup_optimization_email(
-        self,
-        agent_responses: List[str],
-        tool_calls: List[Dict[str, str]],
-        session_id: str,
-        event_count: int
-    ) -> bool:
-        """Send formatted lineup optimization summary email.
-        
-        Similar to send_summary_email but with a subject line specific to lineup optimization.
-        
-        Args:
-            agent_responses: List of agent text responses
-            tool_calls: List of tool call dicts
-            session_id: Session ID for this run
-            event_count: Total number of events processed
-            
-        Returns:
-            True if email was sent successfully, False otherwise
-        """
-        if not self.is_configured():
-            logger.warning("Email not configured. Skipping email send.")
-            logger.warning("Set GMAIL_SENDER_EMAIL, GMAIL_APP_PASSWORD, and GMAIL_RECIPIENT_EMAIL in .env")
-            return False
-        
-        try:
-            # Create message
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = f"🏈 Fantasy Football Lineup Optimization - {datetime.now().strftime('%m/%d/%Y')}"
-            msg['From'] = self.sender_email
-            msg['To'] = self.recipient_email
-            
-            # Format HTML content (reuse same formatting method)
-            html_content = self.format_summary_email(
-                agent_responses,
-                tool_calls,
-                session_id,
-                event_count
-            )
-            
-            # Attach HTML part
-            html_part = MIMEText(html_content, 'html')
-            msg.attach(html_part)
-            
-            # Send email
-            logger.info(f"Sending lineup optimization email to {self.recipient_email}...")
-            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
-                server.starttls()
-                server.login(self.sender_email, self.app_password)
-                server.send_message(msg)
-            
-            logger.info("Lineup optimization email sent successfully!")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to send lineup optimization email: {e}", exc_info=True)
             return False

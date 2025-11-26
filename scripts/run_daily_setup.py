@@ -64,9 +64,9 @@ async def run_daily_task():
     logger.info("Starting daily agent run")
     logger.info("=" * 80)
     
-    # Track agent actions for email summary
-    agent_responses = []
-    tool_calls = []
+    # Track execution log for email summary
+    execution_log = []
+    error_details = None
     
     try:
         # Create runner with in-memory session service
@@ -98,14 +98,15 @@ async def run_daily_task():
             parts=[types.Part(text=DAILY_PROMPT)]
         )
         
-        # Run the agent (synchronous wrapper around async)
+        # Run the agent asynchronously
         event_count = 0
-        for event in runner.run(
+        async for event in runner.run_async(
             user_id=user_id,
             session_id=session_id,
             new_message=message
         ):
             event_count += 1
+            timestamp = datetime.now().strftime('%H:%M:%S')
             
             # Log model responses and capture for email
             if event.content and event.content.parts:
@@ -113,7 +114,11 @@ async def run_daily_task():
                     if part.text:
                         logger.info(f"Agent: {part.text[:200]}...")
                         # Capture full response for email summary
-                        agent_responses.append(part.text)
+                        execution_log.append({
+                            'timestamp': timestamp,
+                            'type': 'text',
+                            'content': part.text
+                        })
             
             # Log function calls and capture for email
             function_calls = event.get_function_calls()
@@ -121,7 +126,9 @@ async def run_daily_task():
                 for fc in function_calls:
                     logger.info(f"Tool call: {fc.name}")
                     # Capture tool call for email summary
-                    tool_calls.append({
+                    execution_log.append({
+                        'timestamp': timestamp,
+                        'type': 'tool',
                         'name': fc.name,
                         'args': str(fc.args) if hasattr(fc, 'args') else ''
                     })
@@ -131,7 +138,14 @@ async def run_daily_task():
         logger.info("Daily run completed successfully")
         logger.info("=" * 80)
         
-        # Send email summary
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"Error during daily run: {e}", exc_info=True)
+        logger.info("Attempting to send error email...")
+        
+    finally:
+        # Send email summary (even if there was an error)
         try:
             from app.utils.email_sender import EmailSender
             email_sender = EmailSender()
@@ -139,10 +153,10 @@ async def run_daily_task():
             if email_sender.is_configured():
                 logger.info("Sending email summary...")
                 success = email_sender.send_summary_email(
-                    agent_responses=agent_responses,
-                    tool_calls=tool_calls,
+                    execution_log=execution_log,
                     session_id=session_id,
-                    event_count=event_count
+                    event_count=event_count if 'event_count' in locals() else 0,
+                    error_details=error_details
                 )
                 if success:
                     logger.info("Email summary sent successfully")
@@ -150,14 +164,8 @@ async def run_daily_task():
                     logger.warning("Failed to send email summary")
             else:
                 logger.info("Email not configured - skipping email summary")
-                logger.info("To enable email summaries, add GMAIL_SENDER_EMAIL, GMAIL_APP_PASSWORD, and GMAIL_RECIPIENT_EMAIL to .env")
         except Exception as e:
             logger.error(f"Error sending email summary: {e}", exc_info=True)
-            logger.warning("Continuing despite email error...")
-        
-    except Exception as e:
-        logger.error(f"Error during daily run: {e}", exc_info=True)
-        sys.exit(1)
 
 
 if __name__ == "__main__":
