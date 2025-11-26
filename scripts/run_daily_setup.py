@@ -64,6 +64,10 @@ async def run_daily_task():
     logger.info("Starting daily agent run")
     logger.info("=" * 80)
     
+    # Track agent actions for email summary
+    agent_responses = []
+    tool_calls = []
+    
     try:
         # Create runner with in-memory session service
         session_service = InMemorySessionService()
@@ -103,26 +107,58 @@ async def run_daily_task():
         ):
             event_count += 1
             
-            # Log model responses
+            # Log model responses and capture for email
             if event.content and event.content.parts:
                 for part in event.content.parts:
                     if part.text:
                         logger.info(f"Agent: {part.text[:200]}...")
+                        # Capture full response for email summary
+                        agent_responses.append(part.text)
             
-            # Log function calls
+            # Log function calls and capture for email
             function_calls = event.get_function_calls()
             if function_calls:
                 for fc in function_calls:
                     logger.info(f"Tool call: {fc.name}")
+                    # Capture tool call for email summary
+                    tool_calls.append({
+                        'name': fc.name,
+                        'args': str(fc.args) if hasattr(fc, 'args') else ''
+                    })
         
         logger.info(f"Processed {event_count} events")
         logger.info("=" * 80)
         logger.info("Daily run completed successfully")
         logger.info("=" * 80)
         
+        # Send email summary
+        try:
+            from app.utils.email_sender import EmailSender
+            email_sender = EmailSender()
+            
+            if email_sender.is_configured():
+                logger.info("Sending email summary...")
+                success = email_sender.send_summary_email(
+                    agent_responses=agent_responses,
+                    tool_calls=tool_calls,
+                    session_id=session_id,
+                    event_count=event_count
+                )
+                if success:
+                    logger.info("Email summary sent successfully")
+                else:
+                    logger.warning("Failed to send email summary")
+            else:
+                logger.info("Email not configured - skipping email summary")
+                logger.info("To enable email summaries, add GMAIL_SENDER_EMAIL, GMAIL_APP_PASSWORD, and GMAIL_RECIPIENT_EMAIL to .env")
+        except Exception as e:
+            logger.error(f"Error sending email summary: {e}", exc_info=True)
+            logger.warning("Continuing despite email error...")
+        
     except Exception as e:
         logger.error(f"Error during daily run: {e}", exc_info=True)
         sys.exit(1)
+
 
 if __name__ == "__main__":
     # Run the async task

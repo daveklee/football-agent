@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     model_name: str = Field("gemini-2.5-pro", env="MODEL_NAME")
     temperature: float = Field(0.7, env="TEMPERATURE")
     
+    # Email notifications (optional)
+    gmail_sender_email: Optional[str] = Field(None, env="GMAIL_SENDER_EMAIL")
+    gmail_app_password: Optional[str] = Field(None, env="GMAIL_APP_PASSWORD")
+    gmail_recipient_email: Optional[str] = Field(None, env="GMAIL_RECIPIENT_EMAIL")
+
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
