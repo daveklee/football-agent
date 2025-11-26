@@ -24,7 +24,7 @@ sys.path.insert(0, PROJECT_ROOT)
 
 from app.agent import agent
 from google.adk.runners import Runner
-from google.adk.sessions.in_memory_session_service import InMemorySessionService
+from google.adk.sessions.database_session_service import DatabaseSessionService
 from google.genai import types
 
 # Configure logging
@@ -67,10 +67,14 @@ async def run_daily_task():
     # Track execution log for email summary
     execution_log = []
     error_details = None
+    # Initialize session service
+    # Use DatabaseSessionService for persistence (SQLite)
+    db_path = os.path.join(os.getcwd(), "sessions.db")
+    db_url = f"sqlite:///{db_path}"
+    logger.info(f"Using persistent session storage at {db_url}")
+    session_service = DatabaseSessionService(db_url=db_url)
     
     try:
-        # Create runner with in-memory session service
-        session_service = InMemorySessionService()
         runner = Runner(
             app_name="fantasy-football-agent",
             agent=agent,

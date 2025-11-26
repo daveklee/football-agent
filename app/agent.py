@@ -57,8 +57,9 @@ import google.generativeai as genai
 
 from app.utils.config import settings
 from app.utils.tools.analysis_tools import AnalysisTools
-from app.utils.league_memory import LeagueRulesMemory
+from app.utils.database_league_memory import DatabaseLeagueRulesMemory
 from app.utils.tools.league_rules_tool import LeagueRulesTool
+from app.tools.memory_tools import remember_fact, get_all_facts, _fact_memory
 
 try:
     from google.adk.memory import InMemoryMemoryService
@@ -134,11 +135,11 @@ class FantasyFootballAgent(Agent):
         except (AttributeError, NameError):
             self._league_id = None
         
-        # Initialize league rules memory for persistent storage
-        self._league_memory = LeagueRulesMemory(
-            memory_service=self._memory_service,
-            app_name=DEFAULT_APP_NAME,
-        )
+        # Initialize league rules memory for persistent storage (database-backed)
+        import os
+        db_path = os.path.join(os.getcwd(), "sessions.db")
+        db_url = f"sqlite:///{db_path}"
+        self._league_memory = DatabaseLeagueRulesMemory(db_url=db_url)
         
         # Initialize league rules tool for discovering and managing league settings
         league_rules_tool = LeagueRulesTool(memory=self._league_memory)
@@ -150,6 +151,7 @@ class FantasyFootballAgent(Agent):
         all_tools = [
             *analysis_tools.get_tools(),
             *league_rules_tool.get_tools(),
+            remember_fact,  # Add persistent memory tool
         ]
         
         # Add MCP toolsets if available
@@ -584,7 +586,13 @@ The agent automatically tracks workflow progress in session.state. Key state var
 - State is updated automatically - you don't need to manually update it, but you can reference it to know where you are
 """
         
+        # Get stored facts
+        facts_context = _fact_memory.get_formatted_facts()
+        if facts_context:
+            facts_context += "\n⚠️ These facts are stored in memory. Use them to guide your decisions.\n"
+        
         return f"""
+{facts_context}
 ⚠️ **CRITICAL WORKFLOW RULES - READ THIS FIRST:**
 1. **NEVER STOP AFTER ONE TOOL CALL!** After EVERY tool call:
    - EVALUATE: What did I learn? What's the current state?
@@ -603,6 +611,11 @@ The agent automatically tracks workflow progress in session.state. Key state var
    - Analysis is complete
    - Actions have been taken (if needed) and verified
    - You can provide a complete answer to the user's question
+
+4. **MEMORY USAGE:**
+   - **READ:** Use the "KNOWN FACTS & PREFERENCES" above to guide your decisions.
+   - **WRITE:** If you learn something new about the user's preferences (e.g., "User hates trading with Ross") or a strategic note for the future (e.g., "Need a QB for Week 9"), use the `remember_fact` tool to save it.
+
 
 ⚠️ **CRITICAL TOOL USAGE:**
 - **Yahoo Fantasy MCP tools (yahoo_ff_*) are READ-ONLY** - they can ONLY fetch data, NOT make changes!
