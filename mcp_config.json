@@ -18,11 +18,10 @@
       "command": "npx",
       "args": [
         "@playwright/mcp@latest",
-        "--extension"
+        "--user-data-dir",
+        "${PWD}/browser_profile"
       ],
-      "env": {
-        "PLAYWRIGHT_MCP_EXTENSION_TOKEN": "pIpVFFp0I6yQe-GRU3QYf3cY4y1JlGHx_VdEiyi_YGk"
-      }
+      "env": {}
     }
   }
 }

@@ -150,10 +150,14 @@ class FantasyFootballAgent(Agent):
         # Initialize analysis tools (LLM-based)
         analysis_tools = AnalysisTools()
         
+        from app.utils.tools.yahoo_login_tool import YahooLoginTool
+        yahoo_login_tool = YahooLoginTool()
+        
         # Collect all tools
         all_tools = [
             *analysis_tools.get_tools(),
             *league_rules_tool.get_tools(),
+            *yahoo_login_tool.get_tools(),
             remember_fact,  # Add persistent memory tool
         ]
         
@@ -597,7 +601,14 @@ The agent automatically tracks workflow progress in session.state. Key state var
         return f"""
 {facts_context}
 ⚠️ **CRITICAL WORKFLOW RULES - READ THIS FIRST:**
-1. **NEVER STOP AFTER ONE TOOL CALL!** After EVERY tool call:
+1. **LOGIN HANDLING:** If you are redirected to a login page (URL contains 'login.yahoo.com'):
+   - Call `get_yahoo_credentials` to retrieve email and password.
+   - Use `playwright__browser_fill` to enter email -> click Next.
+   - Use `playwright__browser_fill` to enter password -> click Next.
+   - If prompted for 2FA, you MUST stop and ask the user to log in manually.
+   - DO NOT give up immediately - try to log in!
+
+2. **NEVER STOP AFTER ONE TOOL CALL!** After EVERY tool call:
    - EVALUATE: What did I learn? What's the current state?
    - ASSESS: What have I accomplished? What's left to do?
    - PLAN: What's the next step? What tool should I call next?
