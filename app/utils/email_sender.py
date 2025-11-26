@@ -120,27 +120,27 @@ class EmailSender:
         Returns:
             HTML formatted email body
         """
-        # Extract key actions for the summary section
-        lineup_changes = []
-        trades = []
-        waiver_wire = []
-        injuries = []
-        other_actions = []
+        # Extract agent's final summary or key decisions from text responses
+        agent_summary = ""
+        key_decisions = []
         
-        for event in execution_log:
-            if event.get('type') == 'tool':
-                name = event.get('name', '')
-                # Only count "write" actions or significant analysis tools
-                if 'playwright' in name.lower() and ('click' in name.lower() or 'type' in name.lower()):
-                     other_actions.append(event)
-                elif 'lineup' in name.lower() or 'optimize' in name.lower():
-                    lineup_changes.append(event)
-                elif 'trade' in name.lower():
-                    trades.append(event)
-                elif 'waiver' in name.lower() or 'pickup' in name.lower():
-                    waiver_wire.append(event)
-                elif 'injury' in name.lower() or 'ir' in name.lower():
-                    injuries.append(event)
+        # Look for the agent's own summary (usually in the last few text responses)
+        for event in reversed(execution_log):
+            if event.get('type') == 'text':
+                content = event.get('content', '')
+                if content:
+                    # Check if this looks like a summary
+                    content_lower = content.lower()
+                    if any(keyword in content_lower for keyword in ['summary', 'optimized', 'completed', 'changes made', 'final']):
+                        agent_summary = content
+                        break
+                    # Also look for decision-making language
+                    if any(keyword in content_lower for keyword in ['moved', 'benched', 'started', 'picked up', 'dropped', 'traded']):
+                        key_decisions.append(content[:500])  # Keep first 500 chars
+        
+        # If we found a summary, use it; otherwise compile from decisions
+        if not agent_summary and key_decisions:
+            agent_summary = "\n\n".join(key_decisions[:3])  # Top 3 decisions
 
         # Build HTML email
         html = f"""
@@ -268,37 +268,13 @@ class EmailSender:
         # Executive Summary of Changes
         html += "<h2>📊 Executive Summary</h2>\n"
         
-        has_changes = False
-        if lineup_changes:
-            html += "<h3>📋 Lineup Changes</h3><ul>"
-            for item in lineup_changes:
-                html += f"<li>Called <code>{item.get('name')}</code></li>"
-            html += "</ul>"
-            has_changes = True
-            
-        if trades:
-            html += "<h3>🤝 Trade Actions</h3><ul>"
-            for item in trades:
-                html += f"<li>Called <code>{item.get('name')}</code></li>"
-            html += "</ul>"
-            has_changes = True
-            
-        if waiver_wire:
-            html += "<h3>🔄 Waiver Wire</h3><ul>"
-            for item in waiver_wire:
-                html += f"<li>Called <code>{item.get('name')}</code></li>"
-            html += "</ul>"
-            has_changes = True
-            
-        if other_actions:
-            html += "<h3>⚙️ Browser Actions</h3><ul>"
-            for item in other_actions:
-                html += f"<li>Called <code>{item.get('name')}</code></li>"
-            html += "</ul>"
-            has_changes = True
-            
-        if not has_changes:
-            html += "<p><em>No significant write actions (changes) were detected in this run.</em></p>"
+        if agent_summary:
+            # Convert the agent's summary from markdown to HTML
+            formatted_summary = self._markdown_to_html(agent_summary)
+            html += f'<div class="summary-box">{formatted_summary}</div>\n'
+        else:
+            html += "<p><em>No summary available. See detailed execution log below.</em></p>\n"
+
 
         # Detailed Execution Log
         html += "<h2>📝 Detailed Execution Log</h2>\n"

@@ -3,7 +3,7 @@ import logging
 from typing import Dict, Any, Optional
 from google.adk.tools import FunctionTool
 
-from app.utils.league_memory import LeagueRulesMemory
+from app.utils.database_league_memory import DatabaseLeagueRulesMemory
 
 logger = logging.getLogger(__name__)
 
@@ -16,13 +16,24 @@ class LeagueRulesTool:
     storage so rules don't need to be fetched every time.
     """
     
-    def __init__(self, memory: Optional[LeagueRulesMemory] = None):
+    def __init__(self, memory: Optional[DatabaseLeagueRulesMemory] = None):
         """Initialize league rules tool.
         
         Args:
-            memory: LeagueRulesMemory instance for persistent storage
+            memory: DatabaseLeagueRulesMemory instance for persistent storage
         """
-        self.memory = memory or LeagueRulesMemory()
+        # Import here to get consistent project root path
+        import os
+        from pathlib import Path
+        
+        if memory is None:
+            # Use project root for database path (consistent across runs)
+            project_root = Path(__file__).parent.parent.parent
+            db_path = os.path.join(project_root, "sessions.db")
+            db_url = f"sqlite:///{db_path}"
+            memory = DatabaseLeagueRulesMemory(db_url=db_url)
+        
+        self.memory = memory
     
     def get_tools(self) -> list[FunctionTool]:
         """Get all league rules management tools."""

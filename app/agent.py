@@ -137,7 +137,10 @@ class FantasyFootballAgent(Agent):
         
         # Initialize league rules memory for persistent storage (database-backed)
         import os
-        db_path = os.path.join(os.getcwd(), "sessions.db")
+        from pathlib import Path
+        # Use project root for database path (consistent across runs)
+        project_root = Path(__file__).parent.parent
+        db_path = os.path.join(project_root, "sessions.db")
         db_url = f"sqlite:///{db_path}"
         self._league_memory = DatabaseLeagueRulesMemory(db_url=db_url)
         
