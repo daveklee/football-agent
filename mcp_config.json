@@ -17,9 +17,14 @@
     "playwright": {
       "command": "npx",
       "args": [
+        "-y",
         "@playwright/mcp@latest",
         "--user-data-dir",
-        "${PWD}/browser_profile"
+        "${PWD}/browser_profile",
+        "--timeout-navigation",
+        "30000",
+        "--timeout-action",
+        "5000"
       ],
       "env": {}
     }

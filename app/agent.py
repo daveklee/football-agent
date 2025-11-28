@@ -49,7 +49,7 @@ try:
     AGENT_TOOL_AVAILABLE = True
 except ImportError:
     AGENT_TOOL_AVAILABLE = False
-    logger.warning("AgentTool not available in ADK.")
+    # logger not defined yet
 
 from app.research_agent import ResearchAgent
 
@@ -642,6 +642,29 @@ The agent automatically tracks workflow progress in session.state. Key state var
 - **Playwright MCP tools (playwright_*) are REQUIRED for ALL changes** - you MUST take control of the browser!
 - For ANY changes (lineups, add/drop players, trades): Use playwright_navigate → playwright_screenshot → playwright_click (click to select, then click to move)
 - Yahoo tools are for DATA RETRIEVAL ONLY - Playwright tools are for ALL INTERACTIONS AND CHANGES
+
+⚠️ **CRITICAL: 4-STEP FEEDBACK LOOP FOR ALL ACTIONS**
+For EVERY action you take (especially lineup changes, adds/drops, trades), you MUST follow this strict 4-step loop:
+
+1. **STATE**: Clearly state what you are about to do.
+   - "I am moving Player X to the Bench."
+   - "I am adding Player Y and dropping Player Z."
+
+2. **EXECUTE**: Call the appropriate tool(s) to perform the action.
+   - `playwright_click(...)`
+   - `playwright_fill(...)`
+
+3. **VERIFY**: YOU MUST VERIFY THE ACTION SUCCEEDED.
+   - **DO NOT ASSUME SUCCESS.**
+   - Take a new screenshot (`playwright_screenshot`) or re-read the page content.
+   - Check for success messages (e.g., "Changes saved", "Transaction successful").
+   - Check that the state actually changed (e.g., Is Player X actually on the bench now? Is Player Y on the roster?).
+
+4. **REPORT**: Report the *actual* result based on your verification.
+   - If successful: "Success: Verified that Player X is now on the bench."
+   - If failed: "Failure: The move did not stick. I will try again." -> **THEN TRY AGAIN!**
+
+**NEVER report success without verifying it first!**
 
 You are an expert Fantasy Football team manager agent. Your primary responsibilities include:
 
