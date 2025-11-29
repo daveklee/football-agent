@@ -460,6 +460,8 @@ class FantasyFootballAgent(Agent):
     async def _track_workflow_state_after(self, context: Any) -> None:
         """Track workflow state after agent call - detect tool calls and update state.
         
+        Also performs automatic fact extraction when the interaction appears to be concluding.
+        
         Note: This callback modifies context.state directly, which is a "dirty read" pattern
         allowed by ADK Runtime. The state changes will be committed by the Runner after
         the agent yields events. For critical state changes, consider yielding Events with
@@ -530,6 +532,154 @@ class FantasyFootballAgent(Agent):
                 if context.state.get('temp:has_browser_actions'):
                     context.state['temp:task_step'] = 'completing'
                     context.state['task_step'] = 'completing'
+        
+        # Auto-extract facts if this appears to be the final turn of the conversation
+        # Detect final turn by checking if the agent has provided a final response without pending actions
+        await self._maybe_extract_facts_from_conversation(context)
+    
+    async def _maybe_extract_facts_from_conversation(self, context: Any) -> None:
+        """Extract facts from conversation if it appears to be concluding.
+        
+        This is called after each agent turn. To avoid extracting facts on every turn,
+        we only extract when the conversation appears to be concluding (e.g., when
+        the agent provides a final summary or when task is marked complete).
+        """
+        if not ADK_CALLBACKS_AVAILABLE or context is None:
+            return
+        
+        try:
+            # Only extract facts if task appears complete or in 'completing' state
+            task_step = context.state.get('temp:task_step', context.state.get('task_step', ''))
+            task_complete = context.state.get('temp:task_complete', context.state.get('task_complete', False))
+            
+            # Check if we've already extracted facts for this session
+            facts_extracted = context.state.get('temp:facts_extracted', False)
+            
+            # Only extract if task is completing/complete AND we haven't extracted yet
+            if (task_step == 'completing' or task_complete) and not facts_extracted:
+                # Get conversation history
+                conversation_history = self._get_conversation_history(context)
+                
+                # Need at least a few turns to extract meaningful facts
+                if len(conversation_history) >= 3:
+                    logger.info("Auto-extracting facts from conversation...")
+                    
+                    # Use LLM to analyze and extract facts
+                    extracted_facts = await self._analyze_conversation_for_facts(conversation_history)
+                    
+                    # Save extracted facts
+                    for fact_text in extracted_facts:
+                        fact_id = _fact_memory.add_fact(fact_text)
+                        logger.info(f"Auto-extracted fact: {fact_text} (ID: {fact_id})")
+                    
+                    if extracted_facts:
+                        logger.info(f"Successfully extracted {len(extracted_facts)} facts from conversation")
+                    
+                    # Mark facts as extracted for this session
+                    context.state['temp:facts_extracted'] = True
+        
+        except Exception as e:
+            logger.error(f"Error during fact extraction: {e}")
+            # Don't let fact extraction errors break the agent
+    
+    def _get_conversation_history(self, context: Any) -> List[Dict[str, str]]:
+        """Extract conversation history from context.
+        
+        Returns:
+            List of conversation turns with role and text
+        """
+        history = []
+        
+        try:
+            # Access conversation history from context events
+            if hasattr(context, 'events') and context.events:
+                for event in context.events:
+                    if hasattr(event, 'content') and event.content:
+                        role = 'unknown'
+                        if hasattr(event.content, 'role'):
+                            role = event.content.role
+                        elif hasattr(event, 'author'):
+                            role = event.author
+                        
+                        # Extract text from parts
+                        if hasattr(event.content, 'parts') and event.content.parts:
+                            for part in event.content.parts:
+                                if hasattr(part, 'text') and part.text:
+                                    history.append({
+                                        'role': role,
+                                        'text': part.text
+                                    })
+        except Exception as e:
+            logger.error(f"Error extracting conversation history: {e}")
+        
+        return history
+    
+    async def _analyze_conversation_for_facts(self, conversation: List[Dict[str, str]]) -> List[str]:
+        """Use LLM to analyze conversation and extract facts worth remembering.
+        
+        Args:
+            conversation: List of conversation turns with role and text
+            
+        Returns:
+            List of fact strings to save
+        """
+        # Format conversation for analysis
+        conversation_text = "\n".join([
+            f"{msg['role'].upper()}: {msg['text']}"
+            for msg in conversation
+        ])
+        
+        # Create analysis prompt
+        analysis_prompt = f"""
+Analyze the following conversation between a user and a fantasy football agent.
+Extract any facts that should be remembered for future interactions.
+
+Focus on:
+1. **User Preferences**: Specific likes/dislikes about players, teams, managers, or strategies
+2. **Strategic Notes**: Future reminders or planning notes (e.g., "Need backup QB for Week 9")
+3. **League Context**: Social dynamics or league-specific culture
+4. **Decision Patterns**: Consistent preferences in decision-making (e.g., "Prefers high-floor over boom-bust")
+
+DO NOT extract:
+- General football knowledge (can be researched later)
+- Temporary information (current week matchups, recent injuries)
+- League rules (handled separately by league rules system)
+- Transaction details (already recorded in history)
+
+CONVERSATION:
+{conversation_text}
+
+Return a JSON array of fact strings to remember. Each fact should be:
+- Concise (one sentence)
+- Actionable (useful for future decisions)
+- Persistent (not time-sensitive)
+
+If no facts should be extracted, return an empty array.
+
+Format: {{"facts": ["fact1", "fact2", ...]}}
+"""
+        
+        try:
+            # Use Gemini to analyze
+            response = model.generate_content(analysis_prompt)
+            result_text = response.text
+            
+            # Parse JSON response
+            import json
+            # Extract JSON from response (may be wrapped in markdown)
+            if "```json" in result_text:
+                result_text = result_text.split("```json")[1].split("```")[0]
+            elif "```" in result_text:
+                result_text = result_text.split("```")[1].split("```")[0]
+            
+            result = json.loads(result_text.strip())
+            facts = result.get("facts", [])
+            
+            return facts
+        
+        except Exception as e:
+            logger.error(f"Error analyzing conversation for facts: {e}")
+            return []
     
     async def _handle_tool_error(self, tool: Any, args: Dict[str, Any], tool_context: Any, error: Exception) -> Dict[str, Any]:
         """Handle tool execution errors to prevent agent stoppage.
