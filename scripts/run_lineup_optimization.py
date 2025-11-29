@@ -70,12 +70,6 @@ DO NOT:
 - Move players to/from IR
 - Handle any roster transactions beyond lineup optimization
 
-Keep in mind:
-* My league has special scoring rules that put extra weight on touchdowns compared to a normal league
-* It has some unique positions including 2 QBs and optional tight ends
-* It uses 0.5 PPR scoring
-* IR positions do not count against roster positions for active players
-
 Make the best sit/start decisions possible to maximize my team's projected points for this week.
 """
 
