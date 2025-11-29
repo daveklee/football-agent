@@ -1,0 +1,143 @@
+# Environment variables
+.env
+.env.*
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+
+# Tests (excluded from public repository)
+tests/
+test_*.py
+*_test.py
+
+# IDE
+.vscode/
+.idea/
+.qoder/
+.kilocode/
+*.swp
+*.swo
+*~
+
+# Cache and logs
+.cache/
+logs/
+*.log
+
+# Coverage reports
+htmlcov/
+.coverage
+coverage.xml
+*.cover
+
+# Auth and tokens
+.auth/
+token.json
+yahoo_token.json
+*.token
+
+# Development and debug files
+debug_*.py
+*_debug.py
+find_*.py
+parse_*.py
+fetch_*.py
+get_*.py
+simple_*.py
+standalone_*.py
+mcp_server_test*.py
+exchange_code.py
+quick_validation.py
+*_enhancement.py
+*_enhanced.py
+check_deployment.py
+enhanced_mcp_*.py
+
+# But allow production enhancement layer and official tests
+!src/services/player_enhancement.py
+!test_enhancement_layer.py
+!test_real_data.py
+!demo_enhancement_layer.py
+
+# Temporary and analysis files
+temp/
+*_analysis.py
+*_summary.py
+cleanup_*.py
+
+# JSON test data
+all_leagues_raw.json
+find_my_team.json
+test_standings.json
+yahoo_teams_raw.json
+*_raw.json
+
+# Config files with sensitive data
+claude_desktop_config.json
+mcp_config*.json
+
+# Temporary files
+*.tmp
+*.bak
+*.old
+tmp/
+
+# Development documentation
+CLAUDE.md
+CONTRIBUTING.md
+FIX_*.md
+CACHE_MANAGER_README.md
+CLAUDE_AI_CONNECTION.md
+REDDIT_SETUP.md
+YAHOO_SETUP.md
+ROSTER_CONSOLIDATION.md
+
+# Deployment scripts
+deploy_to_*.sh
+run_local_mcp.sh
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+
+# Personal/development directories
+.claude/
+.qoder/
+.devcontainer/
+
+# Git hooks and personal scripts
+.githooks/
+hooks/
+
+# Personal notes and private docs
+PERSONAL_*.md
+PRIVATE_*.md
+TODO_*.md
+
+# Runtime and deployment artifacts
+*.pid
+*.lock
+deployment_log.txt
+nohup.out
+
+# OAuth and session files
+oauth_state.json
+session_*.json
+callback_*.html

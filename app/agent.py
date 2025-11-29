@@ -92,7 +92,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configure Gemini API
-genai.configure(api_key=settings.gemini_api_key)
+genai.configure(api_key=settings.gemini_api_key, transport="rest")
 
 
 class FantasyFootballAgent(Agent):
