@@ -255,7 +255,7 @@ async def handle_ff_get_roster(arguments: dict) -> dict:
         {
             "total_players": len(players),
             "players_by_position": players_by_position,
-            "all_players": [serialize_player(player) for player in players],
+            # "all_players": [serialize_player(player) for player in players], # Removed to save tokens
             "analysis_context": {
                 "data_sources": ["Yahoo"] + (["Sleeper"] if effective_external else []),
                 "data_level": data_level,
@@ -281,7 +281,9 @@ async def handle_ff_get_roster(arguments: dict) -> dict:
 
     # Add overall analysis if flagged
     if effective_analysis:
-        total_proj = sum(p.get("projected_points", 0) for p in result["all_players"])
+        # Calculate total from players_by_position instead of all_players
+        all_serialized_players = [p for bucket in players_by_position.values() for p in bucket]
+        total_proj = sum(p.get("projected_points", 0) for p in all_serialized_players)
         starters_count = sum(1 for pos in players_by_position if pos not in ["BN", "IR"])
         result["overall_analysis"] = {
             "total_projected_points": round(total_proj, 1),

@@ -67,27 +67,27 @@ async def run_daily_task():
     # Track execution log for email summary
     execution_log = []
     error_details = None
-    # Initialize session service
-    # Use DatabaseSessionService for persistence (SQLite)
-    # Use absolute path to project root for consistency across runs
-    PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    db_path = os.path.join(PROJECT_ROOT, "sessions.db")
-    db_url = f"sqlite:///{db_path}"
-    logger.info(f"Using persistent session storage at {db_url}")
-    session_service = DatabaseSessionService(db_url=db_url)
-    
+    # Generate unique IDs for this run
+    user_id = "cli_user"
+    session_id = str(uuid.uuid4())
+    logger.info(f"Session ID: {session_id}")
+
     try:
+        # Initialize session service
+        # Use DatabaseSessionService for persistence (SQLite)
+        # Use absolute path to project root for consistency across runs
+        PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        db_path = os.path.join(PROJECT_ROOT, "sessions.db")
+        # Use aiosqlite driver for async support
+        db_url = f"sqlite+aiosqlite:///{db_path}"
+        logger.info(f"Using persistent session storage at {db_url}")
+        session_service = DatabaseSessionService(db_url=db_url)
+
         runner = Runner(
             app_name="fantasy-football-agent",
             agent=agent,
             session_service=session_service
         )
-        
-        # Generate unique IDs for this run
-        user_id = "cli_user"
-        session_id = str(uuid.uuid4())
-        
-        logger.info(f"Session ID: {session_id}")
         
         # Create the session
         await session_service.create_session(
