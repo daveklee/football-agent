@@ -39,8 +39,8 @@ class Settings(BaseSettings):
     mcp_browser_server_url: str = Field("http://localhost:8002", env="MCP_BROWSER_SERVER_URL")
     
     # Model configuration
-    # Using gemini-2.5-pro for function calling support (required for ADK FunctionTools)
-    model_name: str = Field("gemini-2.5-pro", env="MODEL_NAME")
+    # Using gemini-2.5-flash-lite for cost efficiency
+    model_name: str = Field("gemini-2.5-flash-lite", env="MODEL_NAME")
     temperature: float = Field(0.7, env="TEMPERATURE")
     
     # Email notifications (optional)

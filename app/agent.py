@@ -35,7 +35,7 @@ except ImportError:
         class Agent:
             def __init__(self, **kwargs):
                 self.name = kwargs.get('name', 'agent')
-                self.model = kwargs.get('model', 'gemini-2.5-pro')
+                self.model = kwargs.get('model', 'gemini-2.5-flash-lite')
                 self.tools = kwargs.get('tools', [])
                 self.instruction = kwargs.get('instruction', '')
         GoogleSearch = None
@@ -364,7 +364,7 @@ class FantasyFootballAgent(Agent):
             try:
                 from google.adk.models.google_llm import Gemini
                 # Create Gemini LLM instance explicitly to ensure model is set correctly
-                # The default is gemini-2.5-flash, so we must explicitly set gemini-2.5-pro
+                # The default is gemini-2.5-flash, so we must explicitly set gemini-2.5-flash-lite if desired
                 llm = Gemini(model=settings.model_name)
                 logger.info(f"Initializing agent with explicit Gemini LLM model: {settings.model_name}")
                 super().__init__(
