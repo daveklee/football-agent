@@ -28,7 +28,7 @@ class ResearchAgent(Agent):
             return
             
         # Use provided model name or default from settings
-        # We use gemini-2.5-pro as it supports tools well
+        # We use gemini-2.5-flash-lite for cost efficiency
         model_id = model_name or settings.model_name
         
         try:

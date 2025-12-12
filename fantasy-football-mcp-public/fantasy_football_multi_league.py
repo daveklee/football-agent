@@ -572,7 +572,7 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": "Data detail level: 'basic', 'standard', 'enhanced'",
                         "enum": ["basic", "standard", "enhanced"],
-                        "default": "standard",
+                        "default": "basic",
                     },
                     "include_analysis": {
                         "anyOf": [{"type": "boolean"}, {"type": "null"}],
@@ -581,13 +581,13 @@ async def list_tools() -> list[Tool]:
                     },
                     "include_projections": {
                         "anyOf": [{"type": "boolean"}, {"type": "null"}],
-                        "description": "Include projections from Yahoo and Sleeper",
-                        "default": True,
+                        "description": "Include projections from Yahoo and Sleeper (DISABLED by default to save tokens)",
+                        "default": False,
                     },
                     "include_external_data": {
                         "anyOf": [{"type": "boolean"}, {"type": "null"}],
-                        "description": "Include Sleeper data, trending, and matchups",
-                        "default": True,
+                        "description": "Include Sleeper data, trending, and matchups (DISABLED by default to save tokens)",
+                        "default": False,
                     },
                 },
                 "required": ["league_key"],
@@ -652,13 +652,13 @@ async def list_tools() -> list[Tool]:
                     },
                     "include_projections": {
                         "anyOf": [{"type": "boolean"}, {"type": "null"}],
-                        "description": "Include projections from Yahoo and Sleeper",
-                        "default": True,
+                        "description": "Include projections from Yahoo and Sleeper (DISABLED by default to save tokens)",
+                        "default": False,
                     },
                     "include_external_data": {
                         "anyOf": [{"type": "boolean"}, {"type": "null"}],
-                        "description": "Include Sleeper data, trending, and matchups",
-                        "default": True,
+                        "description": "Include Sleeper data, trending, and matchups (DISABLED by default to save tokens)",
+                        "default": False,
                     },
                 },
                 "required": ["league_key"],
@@ -739,7 +739,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="ff_get_waiver_wire",
-            description="Get top available waiver wire players with detailed stats and projections",
+            description="Get top available waiver wire players with basic stats",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -778,13 +778,13 @@ async def list_tools() -> list[Tool]:
                     },
                     "include_projections": {
                         "anyOf": [{"type": "boolean"}, {"type": "null"}],
-                        "description": "Include projections from Yahoo and Sleeper",
-                        "default": True,
+                        "description": "Include projections from Yahoo and Sleeper (DISABLED by default to save tokens)",
+                        "default": False,
                     },
                     "include_external_data": {
                         "anyOf": [{"type": "boolean"}, {"type": "null"}],
-                        "description": "Include Sleeper data, trending, and matchups",
-                        "default": True,
+                        "description": "Include Sleeper data, trending, and matchups (DISABLED by default to save tokens)",
+                        "default": False,
                     },
                 },
                 "required": ["league_key"],

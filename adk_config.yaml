@@ -6,7 +6,7 @@ region: us-central1
 
 agent:
   name: fantasy_football_manager
-  # Using gemini-2.5-flash-lite
+  # Using gemini-2.5-flash-lite for function calling support (required for ADK FunctionTools)
   model: gemini-2.5-flash-lite
   temperature: 0.7
   

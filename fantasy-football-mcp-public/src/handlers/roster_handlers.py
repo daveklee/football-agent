@@ -27,16 +27,17 @@ async def handle_ff_get_roster(arguments: dict) -> dict:
     """
     league_key = arguments.get("league_key")
     team_key = arguments.get("team_key")
-    # Default to "full" to match fastmcp_server behavior and ensure projections work
-    data_level = arguments.get("data_level", "full")
+    # Default to "basic" to save tokens - projections disabled by default
+    data_level = arguments.get("data_level", "basic")
     # Check if explicit flags were passed (differentiate from defaults)
     include_projections_explicit = "include_projections" in arguments
     include_external_explicit = "include_external_data" in arguments
     include_analysis_explicit = "include_analysis" in arguments
     
-    include_projections = arguments.get("include_projections", True)
-    include_external_data = arguments.get("include_external_data", True)
-    include_analysis = arguments.get("include_analysis", True)
+    # All defaults changed to False to reduce context window usage
+    include_projections = arguments.get("include_projections", False)
+    include_external_data = arguments.get("include_external_data", False)
+    include_analysis = arguments.get("include_analysis", False)
     week = arguments.get("week")
 
     # Set defaults based on data_level

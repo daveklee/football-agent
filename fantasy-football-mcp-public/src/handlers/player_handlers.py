@@ -30,9 +30,10 @@ async def handle_ff_get_players(arguments: dict) -> dict:
     position = arguments.get("position", "")
     count = arguments.get("count", 10)
     week = arguments.get("week")
+    # All defaults changed to False to reduce context window usage
     include_analysis = arguments.get("include_analysis", False)
-    include_projections = arguments.get("include_projections", True)
-    include_external_data = arguments.get("include_external_data", True)
+    include_projections = arguments.get("include_projections", False)
+    include_external_data = arguments.get("include_external_data", False)
 
     pos_filter = f";position={position}" if position else ""
     data = await yahoo_api_call(f"league/{league_key}/players;status=A{pos_filter};count={count}")
@@ -308,9 +309,10 @@ async def handle_ff_get_waiver_wire(arguments: dict) -> dict:
 
     week = arguments.get("week")
     team_key = arguments.get("team_key")
+    # All defaults changed to False to reduce context window usage
     include_analysis = arguments.get("include_analysis", False)
-    include_projections = arguments.get("include_projections", True)
-    include_external_data = arguments.get("include_external_data", True)
+    include_projections = arguments.get("include_projections", False)
+    include_external_data = arguments.get("include_external_data", False)
 
     # Fetch basic Yahoo waiver players
     basic_players = await get_waiver_wire_players(league_key, position, sort, count)

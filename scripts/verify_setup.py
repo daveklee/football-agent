@@ -123,7 +123,7 @@ def test_gemini_api():
         import google.generativeai as genai
         genai.configure(api_key=api_key)
         # Using gemini-2.5-pro for function calling support
-        model = genai.GenerativeModel('gemini-2.5-pro')
+        model = genai.GenerativeModel('gemini-2.5-flash-lite')
         response = model.generate_content("Say 'test' if you can read this.")
         print(f"\n✅ Gemini API: Connected successfully")
         print(f"   Response: {response.text[:50]}...")
