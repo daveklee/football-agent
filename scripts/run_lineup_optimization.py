@@ -45,32 +45,37 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 LINEUP_OPTIMIZATION_PROMPT = """
-Optimize my fantasy football lineup for this week based on current player projections and league-specific rules.
+Optimize my fantasy football lineup for this week using Yahoo website projections.
 
-Focus exclusively on lineup optimization:
-1. Check if league rules are already known. If not, discover them from both the Yahoo Fantasy API and by navigating to the league settings page in the browser to get complete scoring rules.
-2. Retrieve my current roster and this week's matchup data using the Yahoo Fantasy MCP tools.
-3. Analyze the lineup using YOUR OWN reasoning, with these priorities in order:
-   a. FIRST PRIORITY: Use Yahoo's projected points for THIS WEEK as the primary decision factor (available in the roster/matchup data)
-   b. SECOND PRIORITY: Consider any injury news, weather alerts, or late-breaking information that Yahoo's projections may not reflect
-   c. THIRD PRIORITY: Factor in matchup quality, recent performance trends, and game flow expectations
-4. Make lineup decisions that respect my league's specific scoring rules and position requirements:
-   * If PPR league: Prioritize high-reception players
-   * If Standard league: Prioritize touchdown-dependent players  
-   * Consider my league's exact position requirements (2 QB, FLEX, SUPERFLEX, etc.)
-5. Execute lineup changes using the Playwright MCP browser tools:
-   * Navigate to the Yahoo Fantasy Football lineup page
-   * Use screenshots to see the current lineup
-   * Click to select and move players to optimal positions
-   * Verify changes were successful
+WORKFLOW:
+1. Check if league rules are already known (check_if_rules_known). If not, discover them.
+2. Navigate to my Yahoo Fantasy team page using playwright__browser_navigate
+3. Extract player projections from the "Proj Pts" column:
+   - Call get_projection_extraction_script to get the JavaScript
+   - Run it via playwright__browser_evaluate
+   - These projections are calculated using MY league's specific scoring rules!
+4. Analyze the lineup:
+   - Start players with the HIGHEST projected points
+   - Bench players with lower projections
+   - Respect position requirements (don't bench my only QB, etc.)
+   - Consider injury status (don't start injured players)
+5. Execute lineup changes:
+   - Use playwright__browser_snapshot to see the roster
+   - Use playwright__browser_click to swap players
+   - Verify changes with playwright__browser_take_screenshot
+
+IMPORTANT:
+- The Yahoo website projections are the MOST ACCURATE because they use MY league's scoring rules
+- Use the extracted Proj Pts values as the PRIMARY decision factor
+- Higher projection = Start, Lower projection = Bench
 
 DO NOT:
 - Propose or evaluate trades
-- Make waiver wire pickups or drops
+- Make waiver wire pickups or drops  
 - Move players to/from IR
-- Handle any roster transactions beyond lineup optimization
+- Try to get projections from any source OTHER than the Yahoo website
 
-Make the best sit/start decisions possible to maximize my team's projected points for this week.
+Make the best sit/start decisions to maximize projected points for this week.
 """
 
 async def run_lineup_optimization():
